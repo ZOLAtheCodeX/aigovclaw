@@ -19,6 +19,12 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from tools.registry import REGISTRY, Tool, ToolRegistry
 from tools.aigovops_tools import PLUGIN_TOOL_DEFS, register_aigovops_tools, unregister_all
+from tools.jules_tools import (
+    DISPATCH_JULES_SESSION_TOOL,
+    PLAYBOOK_ENUM,
+    register_jules_tools,
+    unregister_jules_tools,
+)
 
 
 def _dummy_handler(inputs: dict) -> dict:
@@ -290,6 +296,48 @@ def test_invoke_rejects_plugin_schema_violation():
         return
     unregister_all()
     raise AssertionError("expected ValueError for enum violation")
+
+
+# --- jules_tools registration ---
+
+
+def test_jules_tool_registers_with_correct_safety_metadata():
+    unregister_jules_tools()
+    try:
+        name = register_jules_tools()
+        assert name == "dispatch_jules_session"
+        tool = REGISTRY.get("dispatch_jules_session")
+        assert tool.is_read_only is False
+        assert tool.is_concurrency_safe is False
+        assert tool.is_destructive is False
+        assert tool.requires_human_approval is True
+        assert tool.source_skill == "jules-integration"
+        desc = REGISTRY.describe("dispatch_jules_session")
+        assert desc["safety"]["is_read_only"] is False
+        assert desc["safety"]["is_concurrency_safe"] is False
+        assert desc["safety"]["is_destructive"] is False
+    finally:
+        unregister_jules_tools()
+
+
+def test_jules_tool_schema_has_required_fields():
+    schema = DISPATCH_JULES_SESSION_TOOL.input_schema
+    for required_name in ("playbook", "target_repo", "payload"):
+        assert required_name in schema
+        assert schema[required_name]["required"] is True
+    assert schema["playbook"]["enum"] == PLAYBOOK_ENUM
+    assert len(PLAYBOOK_ENUM) == 8
+
+
+def test_jules_tool_registration_is_idempotent():
+    unregister_jules_tools()
+    try:
+        name1 = register_jules_tools()
+        name2 = register_jules_tools()
+        assert name1 == name2 == "dispatch_jules_session"
+        assert "dispatch_jules_session" in REGISTRY.list_tools()
+    finally:
+        unregister_jules_tools()
 
 
 def _run_all():
