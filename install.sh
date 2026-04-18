@@ -49,9 +49,14 @@ done
 
 run() {
   if [[ "${DRY_RUN}" == "1" ]]; then
-    echo "[dry-run] $*"
+    printf "[dry-run] %q" "$1"
+    shift
+    for arg in "$@"; do
+      printf " %q" "$arg"
+    done
+    echo
   else
-    eval "$@"
+    "$@"
   fi
 }
 
@@ -92,7 +97,7 @@ for subdir in skills/aigovops plugins/aigovops persona \
               memory/aigovclaw/metrics memory/aigovclaw/gap-assessment \
               memory/aigovclaw/thresholds memory/aigovclaw/flagged-issues
 do
-  run mkdir -p "\"${WORKSPACE}/${subdir}\""
+  run mkdir -p "${WORKSPACE}/${subdir}"
 done
 
 # Step 3: install the AIGovOps catalogue (skills + plugins).
@@ -112,38 +117,38 @@ if [[ -d "${ADJACENT_AIGOVOPS}/skills" && -d "${ADJACENT_AIGOVOPS}/plugins" ]]; 
 else
   echo "      Cloning aigovops from ${AIGOVOPS_REPO_URL}"
   TMP_CLONE="$(mktemp -d)"
-  run git clone --depth 1 "${AIGOVOPS_REPO_URL}" "\"${TMP_CLONE}/aigovops\""
+  run git clone --depth 1 "${AIGOVOPS_REPO_URL}" "${TMP_CLONE}/aigovops"
   AIGOVOPS_ROOT="${TMP_CLONE}/aigovops"
 fi
 
 run rsync -a --delete \
-  "\"${AIGOVOPS_ROOT}/skills/\"" \
-  "\"${WORKSPACE}/skills/aigovops/\""
+  "${AIGOVOPS_ROOT}/skills/" \
+  "${WORKSPACE}/skills/aigovops/"
 echo "      Skills deployed to ${WORKSPACE}/skills/aigovops/"
 
 run rsync -a --delete \
-  "\"${AIGOVOPS_ROOT}/plugins/\"" \
-  "\"${WORKSPACE}/plugins/aigovops/\""
+  "${AIGOVOPS_ROOT}/plugins/" \
+  "${WORKSPACE}/plugins/aigovops/"
 echo "      Plugins deployed to ${WORKSPACE}/plugins/aigovops/"
 
 # Copy the AIGovClaw tool registration module into the workspace. This
 # is Hermes-specific and lives in aigovclaw (not aigovops). Using
 # rsync instead of cp -r so re-runs refresh cleanly.
-run mkdir -p "\"${WORKSPACE}/tools\""
-run rsync -a --delete "\"${REPO_ROOT}/tools/\"" "\"${WORKSPACE}/tools/\""
+run mkdir -p "${WORKSPACE}/tools"
+run rsync -a --delete "${REPO_ROOT}/tools/" "${WORKSPACE}/tools/"
 echo "      Tool registration module deployed to ${WORKSPACE}/tools/"
 
 # Clean up the clone if we made one.
 if [[ -n "${TMP_CLONE:-}" ]]; then
-  run rm -rf "\"${TMP_CLONE}\""
+  run rm -rf "${TMP_CLONE}"
 fi
 
 # Step 4: install persona and runtime config.
 echo "[4/5] Installing persona and Hermes configuration"
-run cp "\"${REPO_ROOT}/persona/SOUL.md\"" "\"${WORKSPACE}/SOUL.md\""
+run cp "${REPO_ROOT}/persona/SOUL.md" "${WORKSPACE}/SOUL.md"
 # Preserve an existing config if present; AIGovClaw writes to a dedicated
 # file so it does not overwrite arbitrary user config.
-run cp "\"${REPO_ROOT}/config/hermes.yaml\"" "\"${WORKSPACE}/config.aigovclaw.yaml\""
+run cp "${REPO_ROOT}/config/hermes.yaml" "${WORKSPACE}/config.aigovclaw.yaml"
 echo "      Persona written to ${WORKSPACE}/SOUL.md"
 echo "      Config written to ${WORKSPACE}/config.aigovclaw.yaml"
 echo "      Merge into your primary config.yaml per config/hermes.yaml comments."
