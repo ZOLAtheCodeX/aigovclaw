@@ -36,6 +36,12 @@ def _cmd_generate(args: argparse.Namespace) -> int:
 
 def _cmd_serve(args: argparse.Namespace) -> int:
     evidence = resolve_evidence_path(args.evidence)
+    if getattr(args, "demo_dir", None):
+        demo = Path(args.demo_dir)
+        dst = Path(args.evidence) if args.evidence else Path(tempfile.mkdtemp(prefix="aigovclaw-hub-demo-"))
+        written = import_demo_outputs(demo, dst)
+        print(f"Imported {len(written)} demo artifacts into {dst}")
+        evidence = dst
     tmp_root = Path(tempfile.mkdtemp(prefix="aigovclaw-hub-"))
     out_html = tmp_root / "index.html"
     generate(out_html, evidence_path=evidence)
@@ -103,6 +109,14 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--port", type=int, default=8080)
     s.add_argument("--host", default="127.0.0.1")
     s.add_argument("--evidence", default=None, help="Override evidence store path.")
+    s.add_argument(
+        "--demo-dir",
+        default=None,
+        help=(
+            "Path to aigovops/examples/demo-scenario/outputs/. When set, the "
+            "flat demo outputs are reshaped into the hub layout before serving."
+        ),
+    )
     s.add_argument("--open", action="store_true", help="Open a browser window.")
     s.set_defaults(func=_cmd_serve)
 
