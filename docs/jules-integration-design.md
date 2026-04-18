@@ -103,7 +103,7 @@ Fields:
 
 ### 3.2 State machine
 
-```
+```text
 flagged -> queued -> dispatched -> in-progress -> draft-pr -> reviewed -> merged
                                 \-> failed -> escalated
                                 \-> rejected
@@ -298,7 +298,7 @@ The dispatcher also needs a GitHub token to read `FlaggedIssue` records if they 
 
 Proposed structure inside `aigovclaw`:
 
-```
+```text
 aigovclaw/
   jules/
     README.md                       human-readable overview of this module
@@ -360,7 +360,7 @@ For AIGovOps, (1) and (3) should not occur (the repos have standard Node and Pyt
 
 On terminal failure:
 
-```
+```text
 Is retry_count < 2?
 |
 +-- Yes:
@@ -408,7 +408,7 @@ This is non-negotiable. A Jules session that does not produce an audit entry is 
 
 ### 9.2 Audit loop
 
-```
+```text
 Jules session terminal state reached (merged, rejected, escalated)
    |
    v
