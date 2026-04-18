@@ -168,7 +168,7 @@ python3 -m jules.cli show <id>
 
 The dispatcher does not run as a daemon in this version. Operator runs `dispatch` and `poll` explicitly or wires them into cron. Example cron:
 
-```cron
+```text
 */5 * * * * cd /path/to/aigovclaw && python3 -m jules.cli dispatch --max-parallel 3
 */2 * * * * cd /path/to/aigovclaw && python3 -m jules.cli poll
 ```
