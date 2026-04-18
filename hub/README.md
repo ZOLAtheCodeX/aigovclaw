@@ -262,15 +262,48 @@ The hub is a read-only consumer of the evidence store. It has no dependency on
 `tools/`, `mcp_server/`, or `jules/`. Those modules produce artifacts. The hub
 reads them. The one-way dependency is the whole point.
 
-## Future: hub v1
+## v1: React artifact variant
 
-When the user is ready to invest in the richer interactive view, v1 will use:
+Hub v1 is an optional richer interactive view that coexists with v0. v0
+remains the default portable single-file output and does not change.
 
-- React with TypeScript.
-- Tailwind for utility styling.
-- shadcn/ui for interactive components.
-- `web-artifacts-builder` for bundling into a single claude.ai artifact.
+| Variant | Default | JavaScript | Use when |
+|---|---|---|---|
+| v0 | Yes. | Tiny jurisdiction switcher only. | Audit, archive, email, PDF, USB, court. |
+| v1 | No. Opt-in. | React 18 + inline app code. | Day-to-day review with sort, filter, collapse, charts. |
 
-v1 will keep the static generated build for audit and archival contexts. It
-will add a live mode that reads the evidence store via a thin read-only JSON
-endpoint served by the same stdlib process as v0's `serve` command.
+v1 matches the v0 aesthetic bar exactly: JetBrains Mono display, Crimson Pro
+body, burnt-orange `#d97757` accent on `#0f1419` deep slate. No Inter, no
+Roboto, no purple gradients. Same four-jurisdiction tab bar, same read-only
+threat model, same single-file output.
+
+### Shape
+
+- React 18 UMD bundles inlined from `hub/v1/vendor/` (maintainer must drop
+  the files; see v1/README for sources).
+- Hand-curated Tailwind-like CSS subset (~300 rules) embedded inline. No
+  Tailwind build step, no npm.
+- shadcn-shaped components (`Card`, `Table`, `Tabs`, `Badge`, `Button`,
+  `Alert`) re-implemented inline as plain functional React components.
+- Inlined JSON data payload, parsed at boot, read-only.
+
+### Generate v1
+
+```bash
+python3 -m aigovclaw.hub.cli generate-v1 --output hub-v1.html
+# or directly:
+python3 -m aigovclaw.hub.v1.cli generate --output hub-v1.html
+```
+
+If the vendored React files are missing, the generator exits with a clear
+error naming the files and their sources. The generator never fetches over
+the network.
+
+### Serve v1
+
+```bash
+python3 -m aigovclaw.hub.v1.cli serve --port 8080 --open
+```
+
+See `hub/v1/README.md` for full v1 documentation and the maintainer vendor
+drop procedure.
