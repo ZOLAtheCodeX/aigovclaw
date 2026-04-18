@@ -16,6 +16,7 @@ artifact type optionally mapping to multiple MCP tools in parallel.
 
 from __future__ import annotations
 
+import functools
 from datetime import datetime, timezone
 from typing import Any
 
@@ -42,14 +43,25 @@ def _classify_action(artifact: dict[str, Any]) -> str:
     return "completed-autonomously-high-confidence"
 
 
+import functools
+
+@functools.lru_cache(maxsize=1024)
+def _split_path(path: str) -> tuple[str, ...]:
+    return tuple(path.split("."))
+
+
 def _get_nested(obj: Any, path: str) -> Any:
     """Navigate a dotted path through a nested dict, returning None on miss."""
     if not path:
         return None
+
     cur = obj
-    for part in path.split("."):
-        if isinstance(cur, dict) and part in cur:
-            cur = cur[part]
+    for part in _split_path(path):
+        if isinstance(cur, dict):
+            try:
+                cur = cur[part]
+            except KeyError:
+                return None
         else:
             return None
     return cur
