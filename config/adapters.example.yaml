@@ -1,140 +1,145 @@
-# AIGovClaw GRC adapter configuration (example).
+# AIGovClaw adapter configuration (example).
 #
-# Adapters push AIGovOps plugin artifacts (audit logs, risk registers, SoAs,
-# AISIAs, gap assessments) to external GRC platforms. Each adapter is
-# independent. Enable only the ones your organization uses.
+# AIGovClaw is MCP-first: artifacts are routed through Model Context Protocol
+# servers rather than destination-specific HTTP clients. This file declares
+# (a) which adapters are enabled, and (b) for the MCP router, which artifact
+# types map to which MCP tool invocations.
 #
-# Copy this file to `config/adapters.yaml` and edit. `config/adapters.yaml`
-# is gitignored.
+# See adapters/README.md for the full design rationale. Summary: MCP servers
+# already exist for Notion, Linear, Google Drive, GitHub, Gmail, and others.
+# AIGovClaw reuses them via configuration rather than duplicating HTTP clients.
+# Credentials live in the MCP server's own config, never here.
+#
+# Copy this file to config/adapters.yaml and edit. config/adapters.yaml is
+# gitignored.
 #
 # Style: no em-dashes, no emojis, no hedging.
 
 adapters:
 
   # -------------------------------------------------------------------
-  # Notion adapter. Pushes artifacts to a Notion workspace as database
-  # rows + linked pages. Auth via integration token. Reference adapter
-  # for the open-source GRC category.
+  # local-filesystem: source of record. Always on. Writes every artifact
+  # to ~/.hermes/memory/aigovclaw/<artifact-type>/<system>/<timestamp>.json|md
+  # before any other routing. Disaster recovery baseline.
   # -------------------------------------------------------------------
-  notion:
-    enabled: false
-    auth:
-      # Notion integration token. Never commit. Loaded from env.
-      token_env: NOTION_TOKEN
-    targets:
-      # Each target maps an AIGovOps artifact_type to a Notion database.
-      audit_log:
-        database_id: "00000000000000000000000000000000"
-        mode: append
-      risk_register:
-        database_id: "00000000000000000000000000000000"
-        mode: upsert
-        upsert_key: risk_id
-      statement_of_applicability:
-        database_id: "00000000000000000000000000000000"
-        mode: upsert
-        upsert_key: control_id
-      gap_assessment:
-        database_id: "00000000000000000000000000000000"
-        mode: append
-    field_mapping:
-      # Which plugin output fields map to which Notion property names.
-      # Leave empty to use plugin field names verbatim.
-      risk_register:
-        risk_id: "Risk ID"
-        likelihood: "Likelihood"
-        impact: "Impact"
-        owner: "Owner"
-        treatment: "Treatment"
+  local-filesystem:
+    enabled: true
+    base_path: ~/.hermes/memory/aigovclaw
 
   # -------------------------------------------------------------------
-  # Vanta adapter. Enterprise GRC. Vanta has a public, documented API.
-  # This adapter is planned but not yet implemented. Entry present so
-  # operators can preview the configuration shape.
+  # mcp: the router that translates artifact dicts into MCP tool-invocation
+  # specifications. The Hermes harness reads those specs and invokes the
+  # configured MCP tools. This section does not hold credentials.
   # -------------------------------------------------------------------
-  vanta:
-    enabled: false
-    auth:
-      client_id_env: VANTA_CLIENT_ID
-      client_secret_env: VANTA_CLIENT_SECRET
-      token_url: https://api.vanta.com/oauth/token
-    targets:
-      audit_log:
-        mode: append
-        endpoint: /v1/audit-events
-      control_status:
-        mode: upsert
-        upsert_key: control_id
-        endpoint: /v1/controls
+  mcp:
+    enabled: true
+    routes:
 
-  # -------------------------------------------------------------------
-  # VerifyWise adapter. Open-source GRC focused on AI governance.
-  # Native fit for AIGovOps output. Check https://www.verifywise.ai
-  # for current API status before enabling.
-  # -------------------------------------------------------------------
-  verifywise:
-    enabled: false
-    auth:
-      api_key_env: VERIFYWISE_API_KEY
-      base_url: https://app.verifywise.ai/api
-    targets:
-      risk_register:
-        mode: upsert
-        upsert_key: risk_id
-      statement_of_applicability:
-        mode: upsert
-        upsert_key: control_id
-      aisia:
-        mode: append
+      # Risk register rows route to Notion. Replace database_id with the
+      # ID of the Notion database you created for risk register entries.
+      risk-register-row:
+        - mcp_server: notion
+          tool_name: notion-create-page
+          arguments:
+            parent: {database_id: "<your-notion-risk-register-db-id>"}
+          property_mapping:
+            Title: "description"
+            System: "system_name"
+            Category: "category"
+            Likelihood: "likelihood"
+            Impact: "impact"
+            Residual: "residual_score"
+            Owner: "owner_role"
+            Treatment: "treatment"
+            Status: "status"
 
-  # -------------------------------------------------------------------
-  # ServiceNow GRC adapter. Enterprise, closed-ecosystem. Paid adapter.
-  # Uses ServiceNow REST Table API. Requires admin-granted scope.
-  # -------------------------------------------------------------------
-  servicenow:
-    enabled: false
-    auth:
-      instance_url_env: SERVICENOW_INSTANCE_URL
-      username_env: SERVICENOW_USER
-      password_env: SERVICENOW_PASS
-    targets:
-      risk_register:
-        table: sn_grc_risk
-        mode: upsert
-        upsert_key: u_risk_id
-      control:
-        table: sn_policy_control
-        mode: upsert
-        upsert_key: u_control_id
+      # Nonconformity records route to Linear as issues in the chosen team.
+      nonconformity-record:
+        - mcp_server: linear
+          tool_name: linear-create-issue
+          arguments:
+            team: "<your-linear-team-id>"
+          property_mapping:
+            title: "description"
+            state: "status"
+            description: "root_cause"
+            priority: "severity"
+
+      # Audit-log entries archive to Google Drive as documents, one per entry.
+      audit-log-entry:
+        - mcp_server: google-drive
+          tool_name: google-drive-create-document
+          arguments:
+            folder_id: "<your-drive-audit-folder-id>"
+
+      # Statement of Applicability rows route to Notion.
+      soa-row:
+        - mcp_server: notion
+          tool_name: notion-create-page
+          arguments:
+            parent: {database_id: "<your-notion-soa-db-id>"}
+          property_mapping:
+            Control: "control_id"
+            Title: "control_title"
+            Status: "status"
+            Justification: "justification"
+
+      # AISIA sections route to Notion as a linked set of pages.
+      aisia-section:
+        - mcp_server: notion
+          tool_name: notion-create-page
+          arguments:
+            parent: {database_id: "<your-notion-aisia-db-id>"}
+
+      # Gap assessment rows route to Notion for dashboarding.
+      gap-assessment-row:
+        - mcp_server: notion
+          tool_name: notion-create-page
+          arguments:
+            parent: {database_id: "<your-notion-gap-db-id>"}
+
+      # Risk-tier classification records route to Notion so compliance leads
+      # can triage which systems require Article 27 FRIA or legal review.
+      risk-tier-classification:
+        - mcp_server: notion
+          tool_name: notion-create-page
+          arguments:
+            parent: {database_id: "<your-notion-classification-db-id>"}
+          property_mapping:
+            System: "system_name"
+            Tier: "risk_tier"
+            LegalReview: "requires_legal_review"
+
+      # Metrics reports (NIST MEASURE 2.x) can double-route: a CSV snapshot
+      # to Google Drive, plus a summary row to Notion for leadership.
+      metrics-report:
+        - mcp_server: google-drive
+          tool_name: google-drive-create-document
+          arguments:
+            folder_id: "<your-drive-metrics-folder-id>"
+        - mcp_server: notion
+          tool_name: notion-create-page
+          arguments:
+            parent: {database_id: "<your-notion-metrics-summary-db-id>"}
+
+      # Any artifact type not listed here falls back to local-filesystem only.
+      # Add rows as your Notion / Linear / Drive schema evolves.
 
 # -------------------------------------------------------------------
 # Global adapter behavior.
 # -------------------------------------------------------------------
 behavior:
-  # If true, each push also emits an ISO 42001 Clause 9.1 audit log
-  # entry locally via the audit-log-generator plugin. Non-negotiable
-  # for a governance project. Leave true unless you have a separate
-  # audit pipeline.
-  emit_local_audit_log: true
+  # Every MCP-routed push emits an ISO 42001 Clause 7.5.3 audit-log entry
+  # via the audit-log-generator plugin. Always on for governance integrity.
+  emit_distribution_audit_log: true
 
-  # If true, adapter failures do not abort the orchestrator. The
-  # failed payload is persisted to `~/.hermes/memory/aigovclaw/
-  # adapter-queue/<adapter>/` for retry. Always true in production.
+  # Failed MCP invocations surface to the review queue and do not abort
+  # the workflow. Retry policy is organizational policy, not hardcoded.
   resilient_mode: true
 
-  # Max retries per payload before dead-lettering.
-  max_retries: 3
-  retry_backoff_seconds: [10, 60, 300]
-
-  # Adapter invocations are logged to stderr. No payloads, only
-  # metadata (adapter name, target, mode, byte counts, duration).
-  structured_logging: true
-
-# -------------------------------------------------------------------
-# Redaction rules applied before pushing to any adapter. Examples:
-# strip internal system IDs, anonymize stakeholder names when pushing
-# to external-facing registries, truncate free-text rationale fields.
-# -------------------------------------------------------------------
-redaction:
-  enabled: false
-  rules: []
+  # Action-item classification tag is computed by the router from the
+  # artifact's warnings list and attached as a property on every pushed
+  # page or record. Tags: action-required-human,
+  # completed-autonomously-high-confidence,
+  # completed-autonomously-low-confidence.
+  attach_action_tag: true

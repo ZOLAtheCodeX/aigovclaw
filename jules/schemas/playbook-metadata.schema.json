@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/ZOLAtheCodeX/aigovclaw/jules/schemas/playbook-metadata.schema.json",
+  "title": "PlaybookMetadata",
+  "description": "Per-playbook metadata governing dispatch policy. One entry per playbook .md file.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "playbook_name",
+    "description",
+    "auto_merge_allowed",
+    "requires_human_review",
+    "max_retries",
+    "timeout_seconds"
+  ],
+  "properties": {
+    "playbook_name": {
+      "type": "string",
+      "enum": [
+        "framework-drift",
+        "test-coverage-gap",
+        "dep-bump",
+        "citation-drift",
+        "markdown-lint",
+        "new-plugin-scaffold",
+        "link-toc",
+        "prohibited-content-sweep"
+      ]
+    },
+    "description": {
+      "type": "string",
+      "minLength": 10
+    },
+    "auto_merge_allowed": {
+      "type": "boolean"
+    },
+    "requires_human_review": {
+      "type": "boolean"
+    },
+    "max_retries": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2
+    },
+    "timeout_seconds": {
+      "type": "integer",
+      "minimum": 60,
+      "maximum": 86400
+    },
+    "automation_mode": {
+      "description": "Jules session automation mode. AUTO_CREATE_PR means Jules opens the PR itself at end of session. null means omit the field from the request body and let Jules use its default.",
+      "type": ["string", "null"],
+      "enum": ["AUTO_CREATE_PR", null]
+    },
+    "require_plan_approval": {
+      "description": "Jules session plan-approval gate. When true (default), Jules pauses after producing a plan and waits for human approval before executing. AIGovClaw defaults to true because every playbook has a human-in-loop review gate by design.",
+      "type": "boolean",
+      "default": true
+    }
+  }
+}
