@@ -14,7 +14,7 @@ Vendoring skill content into this repository would create two divergent copies o
 
 ## Layout after install
 
-```
+```text
 skills/
 ├── iso42001/
 │   └── SKILL.md
