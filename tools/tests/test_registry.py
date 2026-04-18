@@ -196,11 +196,13 @@ AIGOVOPS_PLUGINS_PATH = Path(
 )
 
 
-def test_plugin_tool_defs_cover_nine():
+def test_plugin_tool_defs_cover_all_plugins():
     names = {d["name"] for d in PLUGIN_TOOL_DEFS}
-    # Each plugin directory has exactly one tool entry.
-    assert len(names) == 9
-    assert len(PLUGIN_TOOL_DEFS) == 9
+    # Expected count updates as plugins are added. Each plugin directory has
+    # exactly one tool entry.
+    expected_count = 11
+    assert len(names) == expected_count, f"expected {expected_count} tools, got {len(names)}: {sorted(names)}"
+    assert len(PLUGIN_TOOL_DEFS) == expected_count
 
 
 def test_plugin_tool_defs_have_required_keys():
@@ -215,7 +217,9 @@ def test_register_aigovops_tools_succeeds_against_real_plugins():
         return
     unregister_all()
     registered = register_aigovops_tools(AIGOVOPS_PLUGINS_PATH)
-    assert len(registered) == 9
+    # Count derived from PLUGIN_TOOL_DEFS so adding a plugin only requires
+    # updating the defs list, not this assertion.
+    assert len(registered) == len(PLUGIN_TOOL_DEFS)
     for d in PLUGIN_TOOL_DEFS:
         assert d["name"] in registered
         REGISTRY.get(d["name"])

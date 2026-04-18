@@ -233,6 +233,43 @@ PLUGIN_TOOL_DEFS: list[dict[str, Any]] = [
         "artifact_type": "metrics-report",
     },
     {
+        "name": "generate_data_register",
+        "plugin": "data-register-builder",
+        "function": "generate_data_register",
+        "description": (
+            "Generate an ISO 42001 Annex A A.7 / EU AI Act Article 10 AI data register. "
+            "Validates provided dataset entries; does not discover or profile data."
+        ),
+        "input_schema": {
+            "data_inventory": {"type": "list", "required": True, "description": "Dataset entries with required id, name, purpose_stage, source."},
+            "ai_system_inventory": {"type": "list", "required": False},
+            "retention_policy": {"type": "dict", "required": False},
+            "role_matrix_lookup": {"type": "dict", "required": False},
+            "framework": {"type": "string", "required": False, "enum": ["iso42001", "eu-ai-act", "dual"]},
+            "reviewed_by": {"type": "string", "required": False},
+        },
+        "source_skill": "iso42001",
+        "artifact_type": "data-register",
+    },
+    {
+        "name": "check_applicability",
+        "plugin": "applicability-checker",
+        "function": "check_applicability",
+        "description": (
+            "Report EU AI Act provision applicability for a system at a target date. "
+            "Uses skills/eu-ai-act/enforcement-timeline.yaml and delegated-acts.yaml as data."
+        ),
+        "input_schema": {
+            "system_description": {"type": "dict", "required": True, "description": "Includes is_high_risk, is_gpai, optional is_annex_i_product."},
+            "target_date": {"type": "string", "required": True, "description": "ISO 8601 date."},
+            "enforcement_timeline": {"type": "dict", "required": True, "description": "Loaded YAML from skills/eu-ai-act/enforcement-timeline.yaml."},
+            "delegated_acts": {"type": "dict", "required": False, "description": "Loaded YAML from skills/eu-ai-act/delegated-acts.yaml."},
+            "reviewed_by": {"type": "string", "required": False},
+        },
+        "source_skill": "eu-ai-act",
+        "artifact_type": "applicability-report",
+    },
+    {
         "name": "generate_gap_assessment",
         "plugin": "gap-assessment",
         "function": "generate_gap_assessment",

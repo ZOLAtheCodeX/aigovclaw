@@ -179,18 +179,21 @@ if [[ "${DRY_RUN}" == "0" ]]; then
     fi
   done
 
-  # Tool-registry smoke test: register all 9 AIGovOps plugins as Hermes
-  # tools and verify the registry reports them read-only.
+  # Tool-registry smoke test: register every AIGovOps plugin as a Hermes
+  # tool and verify the registry reports them read-only. Expected count
+  # is derived from PLUGIN_TOOL_DEFS so adding a plugin doesn't require
+  # updating this script.
   if command -v python3 >/dev/null 2>&1; then
     echo "      Running tool-registry smoke test..."
     PYTHONPATH="${WORKSPACE}" python3 - <<PYEOF
 import sys
 sys.path.insert(0, "${WORKSPACE}")
-from tools.aigovops_tools import register_aigovops_tools, unregister_all
+from tools.aigovops_tools import register_aigovops_tools, unregister_all, PLUGIN_TOOL_DEFS
 from tools.registry import REGISTRY
 unregister_all()
 names = register_aigovops_tools("${WORKSPACE}/plugins/aigovops")
-assert len(names) == 9, f"expected 9 tools, got {len(names)}"
+expected = len(PLUGIN_TOOL_DEFS)
+assert len(names) == expected, f"expected {expected} tools, got {len(names)}"
 for n in names:
     desc = REGISTRY.describe(n)
     assert desc["safety"]["is_read_only"] is True
