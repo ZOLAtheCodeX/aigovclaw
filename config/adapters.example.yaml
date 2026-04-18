@@ -1,0 +1,140 @@
+# AIGovClaw GRC adapter configuration (example).
+#
+# Adapters push AIGovOps plugin artifacts (audit logs, risk registers, SoAs,
+# AISIAs, gap assessments) to external GRC platforms. Each adapter is
+# independent. Enable only the ones your organization uses.
+#
+# Copy this file to `config/adapters.yaml` and edit. `config/adapters.yaml`
+# is gitignored.
+#
+# Style: no em-dashes, no emojis, no hedging.
+
+adapters:
+
+  # -------------------------------------------------------------------
+  # Notion adapter. Pushes artifacts to a Notion workspace as database
+  # rows + linked pages. Auth via integration token. Reference adapter
+  # for the open-source GRC category.
+  # -------------------------------------------------------------------
+  notion:
+    enabled: false
+    auth:
+      # Notion integration token. Never commit. Loaded from env.
+      token_env: NOTION_TOKEN
+    targets:
+      # Each target maps an AIGovOps artifact_type to a Notion database.
+      audit_log:
+        database_id: "00000000000000000000000000000000"
+        mode: append
+      risk_register:
+        database_id: "00000000000000000000000000000000"
+        mode: upsert
+        upsert_key: risk_id
+      statement_of_applicability:
+        database_id: "00000000000000000000000000000000"
+        mode: upsert
+        upsert_key: control_id
+      gap_assessment:
+        database_id: "00000000000000000000000000000000"
+        mode: append
+    field_mapping:
+      # Which plugin output fields map to which Notion property names.
+      # Leave empty to use plugin field names verbatim.
+      risk_register:
+        risk_id: "Risk ID"
+        likelihood: "Likelihood"
+        impact: "Impact"
+        owner: "Owner"
+        treatment: "Treatment"
+
+  # -------------------------------------------------------------------
+  # Vanta adapter. Enterprise GRC. Vanta has a public, documented API.
+  # This adapter is planned but not yet implemented. Entry present so
+  # operators can preview the configuration shape.
+  # -------------------------------------------------------------------
+  vanta:
+    enabled: false
+    auth:
+      client_id_env: VANTA_CLIENT_ID
+      client_secret_env: VANTA_CLIENT_SECRET
+      token_url: https://api.vanta.com/oauth/token
+    targets:
+      audit_log:
+        mode: append
+        endpoint: /v1/audit-events
+      control_status:
+        mode: upsert
+        upsert_key: control_id
+        endpoint: /v1/controls
+
+  # -------------------------------------------------------------------
+  # VerifyWise adapter. Open-source GRC focused on AI governance.
+  # Native fit for AIGovOps output. Check https://www.verifywise.ai
+  # for current API status before enabling.
+  # -------------------------------------------------------------------
+  verifywise:
+    enabled: false
+    auth:
+      api_key_env: VERIFYWISE_API_KEY
+      base_url: https://app.verifywise.ai/api
+    targets:
+      risk_register:
+        mode: upsert
+        upsert_key: risk_id
+      statement_of_applicability:
+        mode: upsert
+        upsert_key: control_id
+      aisia:
+        mode: append
+
+  # -------------------------------------------------------------------
+  # ServiceNow GRC adapter. Enterprise, closed-ecosystem. Paid adapter.
+  # Uses ServiceNow REST Table API. Requires admin-granted scope.
+  # -------------------------------------------------------------------
+  servicenow:
+    enabled: false
+    auth:
+      instance_url_env: SERVICENOW_INSTANCE_URL
+      username_env: SERVICENOW_USER
+      password_env: SERVICENOW_PASS
+    targets:
+      risk_register:
+        table: sn_grc_risk
+        mode: upsert
+        upsert_key: u_risk_id
+      control:
+        table: sn_policy_control
+        mode: upsert
+        upsert_key: u_control_id
+
+# -------------------------------------------------------------------
+# Global adapter behavior.
+# -------------------------------------------------------------------
+behavior:
+  # If true, each push also emits an ISO 42001 Clause 9.1 audit log
+  # entry locally via the audit-log-generator plugin. Non-negotiable
+  # for a governance project. Leave true unless you have a separate
+  # audit pipeline.
+  emit_local_audit_log: true
+
+  # If true, adapter failures do not abort the orchestrator. The
+  # failed payload is persisted to `~/.hermes/memory/aigovclaw/
+  # adapter-queue/<adapter>/` for retry. Always true in production.
+  resilient_mode: true
+
+  # Max retries per payload before dead-lettering.
+  max_retries: 3
+  retry_backoff_seconds: [10, 60, 300]
+
+  # Adapter invocations are logged to stderr. No payloads, only
+  # metadata (adapter name, target, mode, byte counts, duration).
+  structured_logging: true
+
+# -------------------------------------------------------------------
+# Redaction rules applied before pushing to any adapter. Examples:
+# strip internal system IDs, anonymize stakeholder names when pushing
+# to external-facing registries, truncate free-text rationale fields.
+# -------------------------------------------------------------------
+redaction:
+  enabled: false
+  rules: []

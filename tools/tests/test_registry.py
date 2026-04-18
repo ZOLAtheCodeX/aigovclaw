@@ -4,7 +4,7 @@ Covers:
 - Tool dataclass validation.
 - Registry lifecycle (register, lookup, describe, invoke).
 - Input schema validation.
-- Actual registration of all 9 AIGovOps plugins from the aigovops repo.
+- Actual registration of all AIGovOps plugins from the aigovops repo.
 """
 
 from __future__ import annotations
@@ -200,7 +200,7 @@ def test_plugin_tool_defs_cover_all_plugins():
     names = {d["name"] for d in PLUGIN_TOOL_DEFS}
     # Expected count updates as plugins are added. Each plugin directory has
     # exactly one tool entry.
-    expected_count = 11
+    expected_count = 12
     assert len(names) == expected_count, f"expected {expected_count} tools, got {len(names)}: {sorted(names)}"
     assert len(PLUGIN_TOOL_DEFS) == expected_count
 

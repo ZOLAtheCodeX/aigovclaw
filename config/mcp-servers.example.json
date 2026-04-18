@@ -1,0 +1,46 @@
+{
+  "_comment_top": "Example MCP server configuration fragment. Paste the mcpServers object into your client configuration (for example claude_desktop_config.json on macOS at ~/Library/Application Support/Claude/claude_desktop_config.json). Replace absolute paths with your local checkout locations.",
+
+  "mcpServers": {
+    "aigovops": {
+      "command": "python",
+      "args": ["-m", "aigovclaw.mcp_server.server"],
+      "env": {
+        "AIGOVOPS_PLUGINS_PATH": "/absolute/path/to/aigovops/plugins",
+        "PYTHONPATH": "/absolute/path/to/parent-of-aigovclaw",
+        "AIGOVOPS_MCP_LOG_LEVEL": "INFO"
+      }
+    },
+
+    "_comment_future_adapters": "The entries below are commented stubs showing how future governance-platform MCP adapters would slot in alongside AIGovOps. Uncomment and populate when those adapters exist. The aigovops server produces artifacts; an adapter server pushes them to an external GRC system.",
+
+    "_stub_verifywise": {
+      "command": "python",
+      "args": ["-m", "aigovclaw.adapters.verifywise.mcp_server"],
+      "env": {
+        "VERIFYWISE_API_URL": "https://verifywise.example.com/api",
+        "VERIFYWISE_API_KEY": "replace-with-secret",
+        "PYTHONPATH": "/absolute/path/to/parent-of-aigovclaw"
+      }
+    },
+
+    "_stub_vanta": {
+      "command": "python",
+      "args": ["-m", "aigovclaw.adapters.vanta.mcp_server"],
+      "env": {
+        "VANTA_API_TOKEN": "replace-with-secret",
+        "PYTHONPATH": "/absolute/path/to/parent-of-aigovclaw"
+      }
+    },
+
+    "_stub_notion": {
+      "command": "python",
+      "args": ["-m", "aigovclaw.adapters.notion.mcp_server"],
+      "env": {
+        "NOTION_API_TOKEN": "replace-with-secret",
+        "NOTION_DATABASE_ID_AUDIT_LOG": "replace-with-database-id",
+        "PYTHONPATH": "/absolute/path/to/parent-of-aigovclaw"
+      }
+    }
+  }
+}

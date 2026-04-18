@@ -270,6 +270,22 @@ PLUGIN_TOOL_DEFS: list[dict[str, Any]] = [
         "artifact_type": "applicability-report",
     },
     {
+        "name": "classify_risk_tier",
+        "plugin": "high-risk-classifier",
+        "function": "classify",
+        "description": (
+            "Classify an AI system under EU AI Act risk tiers. "
+            "Screens for Article 5 prohibited practices and Annex III high-risk categories. "
+            "Flags legal-review cases rather than auto-deciding."
+        ),
+        "input_schema": {
+            "system_description": {"type": "dict", "required": True, "description": "Required: system_name, intended_use, sector."},
+            "reviewed_by": {"type": "string", "required": False},
+        },
+        "source_skill": "eu-ai-act",
+        "artifact_type": "risk-tier-classification",
+    },
+    {
         "name": "generate_gap_assessment",
         "plugin": "gap-assessment",
         "function": "generate_gap_assessment",
