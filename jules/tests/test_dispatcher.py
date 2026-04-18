@@ -287,6 +287,52 @@ class TestJulesClient(unittest.TestCase):
         self.assertEqual(body["sources"][0]["githubRepo"]["repo"], "ZOLAtheCodeX/aigovops")
         self.assertEqual(body["requirePlanApproval"], True)
 
+    def test_create_session_defaults_include_automation_mode_and_plan_approval(self):
+        """Default call: body has automationMode=AUTO_CREATE_PR and requirePlanApproval=true."""
+        mock_session = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.content = b"{}"
+        mock_resp.json.return_value = {}
+        mock_session.request.return_value = mock_resp
+        client = JulesClient(api_key="k", session=mock_session)
+        client.create_session(repo="a/b", prompt="p")
+        body = json.loads(mock_session.request.call_args.kwargs["data"])
+        self.assertEqual(body["automationMode"], "AUTO_CREATE_PR")
+        self.assertEqual(body["requirePlanApproval"], True)
+
+    def test_create_session_require_plan_approval_false_is_passed_through(self):
+        """require_plan_approval=False sets requirePlanApproval to false in the body.
+
+        Documented behaviour: the field is always present; a false value is
+        sent verbatim. This is a deliberate choice over omission so Jules
+        cannot silently fall back to its own default.
+        """
+        mock_session = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.content = b"{}"
+        mock_resp.json.return_value = {}
+        mock_session.request.return_value = mock_resp
+        client = JulesClient(api_key="k", session=mock_session)
+        client.create_session(repo="a/b", prompt="p", require_plan_approval=False)
+        body = json.loads(mock_session.request.call_args.kwargs["data"])
+        self.assertIn("requirePlanApproval", body)
+        self.assertEqual(body["requirePlanApproval"], False)
+
+    def test_create_session_automation_mode_none_omits_field(self):
+        """automation_mode=None omits the automationMode field from the body."""
+        mock_session = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.content = b"{}"
+        mock_resp.json.return_value = {}
+        mock_session.request.return_value = mock_resp
+        client = JulesClient(api_key="k", session=mock_session)
+        client.create_session(repo="a/b", prompt="p", automation_mode=None)
+        body = json.loads(mock_session.request.call_args.kwargs["data"])
+        self.assertNotIn("automationMode", body)
+
     def test_non_2xx_raises_api_error(self):
         mock_session = MagicMock()
         mock_resp = MagicMock()
@@ -387,6 +433,51 @@ class TestDispatcherEnqueue(unittest.TestCase):
             changed = dispatcher.dispatch_queued(max_parallel=3, dry_run=True)
             self.assertEqual(changed, [])
             self.assertEqual(issue.state, "queued")
+
+    def test_dispatch_queued_reads_playbook_metadata_overrides(self):
+        """Dispatcher honours per-playbook overrides in payload.playbook_metadata.
+
+        Sets automation_mode=None and require_plan_approval=False on the
+        issue payload; expects those values on the JulesClient.create_session
+        call rather than the dispatcher-level defaults.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            store = FlaggedIssueStore(Path(tmp))
+            pb = _make_playbook_dir(Path(tmp))
+            mock_client = MagicMock()
+            mock_client.create_session.return_value = {"id": "sess-ovr", "url": "https://x"}
+            dispatcher = Dispatcher(store=store, client=mock_client, playbook_dir=pb)
+            issue = _make_issue(
+                id="fi_ovr",
+                payload={
+                    "note": "override-test",
+                    "playbook_metadata": {
+                        "automation_mode": None,
+                        "require_plan_approval": False,
+                    },
+                },
+            )
+            dispatcher.enqueue(issue)
+            changed = dispatcher.dispatch_queued(max_parallel=3, dry_run=False)
+            self.assertEqual(len(changed), 1)
+            kwargs = mock_client.create_session.call_args.kwargs
+            self.assertIsNone(kwargs["automation_mode"])
+            self.assertEqual(kwargs["require_plan_approval"], False)
+
+    def test_dispatch_queued_uses_dispatcher_defaults_when_no_override(self):
+        """Without per-playbook overrides, dispatcher defaults reach create_session."""
+        with tempfile.TemporaryDirectory() as tmp:
+            store = FlaggedIssueStore(Path(tmp))
+            pb = _make_playbook_dir(Path(tmp))
+            mock_client = MagicMock()
+            mock_client.create_session.return_value = {"id": "sess-def", "url": "https://x"}
+            dispatcher = Dispatcher(store=store, client=mock_client, playbook_dir=pb)
+            issue = _make_issue(id="fi_def")
+            dispatcher.enqueue(issue)
+            dispatcher.dispatch_queued(max_parallel=3, dry_run=False)
+            kwargs = mock_client.create_session.call_args.kwargs
+            self.assertEqual(kwargs["automation_mode"], "AUTO_CREATE_PR")
+            self.assertEqual(kwargs["require_plan_approval"], True)
 
 
 # ---------------------------------------------------------------------------

@@ -27,6 +27,20 @@ Payload (JSON):
 {{PAYLOAD_JSON}}
 ```
 
+## Step 0: Stale-issue check (mandatory, blocking)
+
+Before any code change:
+
+1. Extract from the source issue or FlaggedIssue payload the README file path, the exact broken anchor strings, and the heading text or sub-document path the issue claims is missing from the TOC.
+2. Verify each marker still exists in the current HEAD of the target branch. Use `grep -n` with the exact string. Report each marker with file path and line number.
+3. If ANY marker is absent in the current HEAD:
+   a. Do not open a PR.
+   b. Do not modify any file except to post a comment.
+   c. Return verdict "rejected-stale" with a short rationale naming the commit SHA that most recently touched the relevant path (use `git log -1 --pretty=format:"%H %s" -- <path>`).
+4. If ALL markers are present: proceed to Step 1 below.
+
+Stale-check rationale: issues are authored against a point-in-time snapshot. Commits between issue creation and playbook execution may have resolved the problem. Silently re-fixing an already-resolved issue produces spurious PRs, duplicate test coverage, and unstable IDs.
+
 Task:
 
 1. For each broken anchor, locate the target heading in the referenced file. Update the link text and anchor slug to match the current heading.

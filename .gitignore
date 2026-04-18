@@ -28,3 +28,6 @@ jules/archive/**
 !jules/flagged/.gitkeep
 !jules/archive/.gitkeep
 
+# Hub generator output
+hub/output/
+

@@ -240,33 +240,39 @@ Each entry follows this structure:
 
 ## 5. Scheduled vs event-triggered
 
-### 5.1 Constraint
+### 5.1 Dual-dispatch model
 
-Jules scheduled tasks are web-UI only. The API cannot create, edit, or delete scheduled tasks. Editing is not supported at all: delete and recreate is the only option. Supported cadences are daily or weekly.
+Jules ships an official GitHub Action, `google-labs-code/jules-invoke@v1`. This collapses the scheduled-vs-event distinction for any dispatch that can originate inside GitHub: GitHub Actions cron, `issues.labeled`, `workflow_run`, `workflow_dispatch`, and `issues.closed` events are all programmatic entry points, and all of them compose cleanly with `jules-invoke@v1`. This sidesteps the Jules web-UI-only scheduled-tasks limitation entirely.
+
+Two dispatch paths exist. Each playbook is assigned one (and only one) primary path.
+
+1. **GitHub Actions via `jules-invoke@v1` (primary path).** Used for all playbooks whose triggering condition can be expressed as a GitHub event or a cron expression. Versioned in `.github/workflows/jules-<playbook>.yml` in the target repo. Programmatic, auditable via the Actions log, concurrency-capped via the workflow `concurrency:` keyword. Secrets via GitHub Secrets. This is the default.
+
+2. **Direct REST API dispatch via Python dispatcher (secondary path).** Used for dispatches that originate outside GitHub or that require cross-repo orchestration. Specifically: (a) ad-hoc human-authored `FlaggedIssue` records, (b) cross-repo coordinated dispatches that must open paired issues before Jules runs, (c) dispatches originating from the AIGovClaw Hermes agent when it discovers a governance gap during a reasoning loop, (d) re-dispatch after a failed GH Actions run where the retry logic lives in the dispatcher. The dispatcher calls Jules REST with `automationMode: "AUTO_CREATE_PR"` and `requirePlanApproval: true`.
 
 ### 5.2 Split
 
-| Playbook entry | Dispatch mode |
-|---|---|
-| 4.1 Framework drift | Event-triggered via API. Source URL changes are rare and human-flagged. Scheduled polling is wasteful. |
-| 4.2 Test coverage gap | Event-triggered via API. Claude Code emits these after review sessions. |
-| 4.3 Dependency bump | Scheduled weekly via web UI. Backup event trigger when security advisories land. |
-| 4.4 Citation drift | Scheduled weekly via web UI. Event trigger when `STYLE.md` itself changes. |
-| 4.5 Markdown lint | Scheduled daily via web UI. Backup event trigger when CI fails on `main`. |
-| 4.6 New plugin scaffold | Event-triggered via API. Always human-initiated. |
-| 4.7 Link and TOC | Scheduled daily via web UI. |
-| 4.8 Prohibited-content sweep | Scheduled daily via web UI. |
+| Playbook entry | Primary dispatch path | Trigger |
+|---|---|---|
+| 4.1 Framework drift | GitHub Actions | Weekly cron. Secondary: Python dispatcher on human-flagged `authoritative_source` change. |
+| 4.2 Test coverage gap | GitHub Actions | `workflow_run` on CI completion where test count falls below the per-plugin threshold. |
+| 4.3 Dependency bump | GitHub Actions | Weekly cron. Optional backup event on security advisory webhook. |
+| 4.4 Citation drift | GitHub Actions | Weekly cron. Secondary: Python dispatcher on-demand when `STYLE.md` itself changes. |
+| 4.5 Markdown lint | GitHub Actions | `workflow_run` on markdownlint CI failure. |
+| 4.6 New plugin scaffold | Python dispatcher only | Human-initiated FlaggedIssue. Never scheduled. Never event-triggered from inside GitHub. |
+| 4.7 Link and TOC | GitHub Actions | Weekly cron. |
+| 4.8 Prohibited-content sweep | GitHub Actions | Weekly cron. |
 
-### 5.3 No-edit workaround
+### 5.3 Why this split
 
-Scheduled tasks cannot be edited. Two rules cover this:
+- Scheduled-cadence playbooks belong on GH Actions cron because cron is cheap, programmatic, and the workflow file is the source of truth. No mirror registry required.
+- CI-reactive playbooks (4.2, 4.5) belong on `workflow_run` because the trigger condition is literally "CI just failed in a specific way". Any other dispatch path would poll or duplicate the signal.
+- 4.6 (new plugin scaffold) is human-initiated and must carry a human-authored `FlaggedIssue` with the plugin contract already designed. That cannot be expressed as a GitHub event, and it must flow through the dispatcher so the record is validated against `schemas/flagged-issue.schema.json` before Jules runs.
+- 4.1 and 4.4 get dual paths because framework updates and style-guide updates can surface either through a scheduled source-check or through an out-of-band human decision.
 
-1. Scheduled task prompts are thin. They say: "Run playbook `<name>` against repo `<repo>`. Read `aigovclaw/jules/playbook/<name>.md` for full instructions." The real prompt lives in the repo and is version-controlled. Editing the playbook file edits the effective behavior without touching the scheduled task.
-2. When a scheduled task definition itself must change (cadence, repo, or pointer), the change procedure is: (a) create replacement task in web UI with new config, (b) verify it runs once, (c) delete the old task. Both actions are manual. This is tracked as a "scheduled-task migration" checklist entry.
+### 5.4 Workflow-file source of truth
 
-### 5.4 Scheduled task registry
-
-Because scheduled tasks live in Google's UI and cannot be queried via API, the repo keeps a mirror registry at `aigovclaw/jules/scheduled-tasks.md`. Every scheduled task has an entry with: Jules UI ID, cadence, target repo, target playbook, created-on date, last-verified-running date. Zola reviews this registry monthly. Drift between the registry and the UI is a governance finding.
+For every GH Actions-dispatched playbook, the workflow file at `.github/workflows/jules-<playbook>.yml` is the single source of truth for cadence, trigger, and prompt pointer. Changing cadence is a PR against that file. No external registry is required. No web-UI scheduled tasks exist. Section 14 specifies the workflow-file standard.
 
 ## 6. Authentication and secrets
 
@@ -498,33 +504,33 @@ Recommendation: start Phase 0 and Phase 1 on Free tier (dry run plus single-play
 - Dispatcher enforces `MAX_SESSIONS_PER_DAY` per repo. Default proposal: 10. This is a dispatcher-side circuit breaker independent of Jules's quota.
 - When circuit breakers trip, the dispatcher stops queuing and writes an audit-log entry.
 
-## 11. Open questions the user must answer before build
+## 11. Resolved decisions
 
-These decisions block implementation. Each needs a concrete answer.
+The following decisions were open during draft and are now resolved. Each answer is load-bearing for dispatcher, workflow, and playbook implementation.
 
-1. **Write access scope.** Does Jules have write access to both `aigovops` and `aigovclaw`, or only one? Recommendation: both, but only via PR, never direct push to `main`.
+1. **Repo write access.** Jules has write access to both `ZOLAtheCodeX/aigovops` and `ZOLAtheCodeX/aigovclaw`, scoped to playbook-created branches only. No direct push to `main`. No protected-branch bypass. Every PR requires human review before merge, including auto-created ones.
 
-2. **Flagged-issue storage.** Are `FlaggedIssue` records stored as files in `aigovclaw/jules/flagged/` (version-controlled, auditable, readable to humans) or as GitHub issues with a label (natural GitHub UX, but decoupled from code review)? Recommendation: files in repo. Governance wins over UX here.
+2. **Auto-merge policy.** No playbook auto-merges in Phase 1 or Phase 2. All PRs require explicit human approval. Phase 3 may permit auto-merge for `dep-bump` (4.3) and `markdown-lint` (4.5) only if all three conditions hold: CI is fully green, the diff is under 20 lines, and the change is wholly contained to dependency-lockfile surface area or lint-surface area. Any diff that exceeds these bounds routes to human review regardless.
 
-3. **Auto-merge policy.** Which playbook entries are permitted to auto-merge (set `requires_human_merge: false`)? Proposal: only 4.5 (markdown lint) and 4.7 (link and TOC). Everything else requires human merge. Needs explicit Zola sign-off.
+3. **MAX_PARALLEL_JULES_SESSIONS.** Hard cap: 3 in Phase 1, 5 in Phase 2, 10 in Phase 3. Enforced by the dispatcher at record-validation time. The GitHub Actions path enforces the same cap via the `concurrency:` keyword in each workflow file. If both paths dispatch concurrently, the dispatcher queries `gh run list` to count active GH Actions runs and subtracts from its own quota.
 
-4. **MAX_PARALLEL_JULES_SESSIONS cap.** Proposal: 2. Alternative: 3 (matches free-tier concurrency). Preference?
+4. **Cost budget.** Phase 0 and Phase 1 run on Jules Free tier, quota-limited. Phase 2 moves to Pro tier at the team-billing boundary, triggered when sustained weekly volume justifies it. Alarm fires if any rolling 7-day window exceeds 80 percent of plan quota. Alarm routes per open item 8 below.
 
-5. **MAX_SESSIONS_PER_DAY cap per repo.** Proposal: 10. Too low, too high, correct?
+5. **Secrets rotation cadence.** Quarterly, or immediately on any suspected compromise. Rotation mechanics: update the GitHub Secret, reload the dispatcher environment. No code change required. Old key revoked after one successful dispatch confirms the new key.
 
-6. **Tier choice for Phase 1 trial.** Free tier to validate, or start on Pro tier to avoid mid-phase tier change? Cost is the variable.
+6. **Target branch pattern.** `jules/<playbook>-<fi_id>`, where `<fi_id>` is the FlaggedIssue ID slug. Deterministic, human-readable, collision-proof. Branch is auto-deleted 7 days after PR merge (GitHub setting plus dispatcher fallback sweep).
 
-7. **Scheduled task ownership.** Who owns the mirror registry in `jules/scheduled-tasks.md`? Proposal: Zola, reviewed monthly. Alternative: Claude Code updates it as a side effect of proposing scheduled-task changes.
+7. **PR title pattern.** `[jules:<playbook>] <short-description>`. The short-description is generated by Jules. The dispatcher validates that the `[jules:<playbook>]` prefix is present and that `<playbook>` matches the FlaggedIssue record's `playbook` field. Mismatch triggers the `plan-out-of-scope` terminal failure class.
 
-8. **Escalation channel.** When Jules escalates, where does the notification go? Telegram, email, GitHub issue, or all three? Each has different failure modes.
+8. **Review queue destination.** Primary: GitHub PR review (one reviewer, Zola). Secondary: audit-log entry in `~/.hermes/memory/aigovclaw/audit/YYYY-MM.jsonl`, immutable, append-only. Escalations produce two additional outputs: a Telegram message to the Hermes bot on the zo-pi Raspberry Pi, and a new row on the AIGovOps Notion project page (ID `344a16ad15d48122aebed3a507cd9e7e`). The Telegram path is for low-latency attention; the Notion path is for calendar-week review.
 
-9. **Cross-repo coordination.** `AGENTS.md` requires paired tracking issues for cross-repo changes. Can Jules open the paired issues, or must a human open them before Jules dispatches? Recommendation: human opens both, Jules only executes within one repo per session.
+9. **Draft vs ready-for-review PRs.** All Jules PRs open as draft. The dispatcher promotes a PR to ready-for-review only if both conditions hold: CI is green, and the originating FlaggedIssue carries `auto_ready_on_green: true` in its metadata. Default value is `false`. This keeps the reviewer's queue clean by default.
 
-10. **Audit log retention.** Current plan is append-only JSONL rotated monthly. Retention period? Proposal: indefinite. ISO 42001 does not mandate, but governance hygiene favors long retention.
+10. **Terminal failure classes.** The dispatcher recognizes seven classes: `install-failure`, `test-failure`, `timeout`, `model-error`, `api-quota-exceeded`, `plan-out-of-scope`, `repo-access-denied`. The first three are retriable up to 2 attempts. The last four are terminal on first occurrence and escalate immediately per section 8.
 
-11. **Model selection.** Jules Pro defaults to Gemini 3 Pro. Do we want to pin a specific model for reproducibility, or accept Jules's defaults? Jules does not currently expose model choice per session via API, so this may be moot.
+11. **Playbook stale-safety check.** Every playbook file MUST begin with a Step 0 stale-check preamble (added in a parallel commit). The preamble instructs Jules to verify its assumptions against the current repo state before proposing any edit. The dispatcher refuses to render a prompt from any playbook whose file does not start with the required preamble; this raises `PlaybookValidationError` and blocks dispatch.
 
-12. **`AGENTS.md` coverage check.** Before Phase 1, run Jules once manually with a no-op task and verify via activity feed that it loaded `AGENTS.md` and respected Section 3 forbidden-file list. If it touches a forbidden file, Phase 1 does not start.
+12. **Observability and dashboards.** Phase 1: structured JSON logs to stderr, captured by the dispatcher host's log rotation. Phase 2: logs ship to the AIGovClaw hub and render as a static HTML dashboard. Phase 3: optional Grafana dashboard for teams running the hosted hub tier. Metrics specified in section 9.3 are emitted at all three phases; only the surface changes.
 
 ## 12. Non-goals
 
@@ -604,7 +610,88 @@ State:
 
 Exit criteria: this is the steady state. No exit.
 
-## 14. Approval
+## 14. GitHub Actions dispatch path
+
+This section specifies the GH Actions path introduced in section 5. It is the primary dispatch mechanism for all playbooks except 4.6 (new plugin scaffold).
+
+### 14.1 Workflow file naming
+
+One workflow file per playbook per target repo:
+
+```text
+.github/workflows/jules-<playbook>.yml
+```
+
+Examples:
+
+- `.github/workflows/jules-framework-drift.yml`
+- `.github/workflows/jules-dep-bump.yml`
+- `.github/workflows/jules-markdown-lint.yml`
+
+The workflow filename is the identifier. The dispatcher resolves a FlaggedIssue's `playbook` field to this filename when it needs to query GH Actions state.
+
+### 14.2 Required secrets
+
+| Secret | Scope | Purpose |
+|---|---|---|
+| `JULES_API_KEY` | Repo secret (or org secret, if both repos live under the same owner) | Auth header for `jules-invoke@v1`. |
+| `GITHUB_TOKEN` | Provided by Actions runtime | Default write-scoped token. Sufficient for branch creation and PR open. |
+
+No other secrets are required on the GH Actions path. The dispatcher's GitHub token is separate and is not used inside workflows.
+
+### 14.3 Standard usage pattern
+
+`jules-invoke@v1` accepts these inputs (the ones we use):
+
+- `prompt`: the rendered playbook prompt. Injected from the playbook file at `aigovclaw/jules/playbook/<playbook>.md` via a prior `actions/checkout` step plus a read step.
+- `jules_api_key`: `${{ secrets.JULES_API_KEY }}`.
+- `starting_branch`: `main` (or the configured default).
+- `include_last_commit`: `true`.
+- `include_commit_log`: `true` for playbooks that benefit from recent history context (framework-drift, citation-drift, prohibited-content-sweep); `false` for playbooks that must only see working tree state (scaffold, dep-bump).
+
+The `automationMode` and `requirePlanApproval` fields are set by the action itself based on action inputs; we pass equivalent flags so that the GH Actions path produces the same Jules session shape as the Python dispatcher path.
+
+### 14.4 Concurrency
+
+Every workflow declares:
+
+```yaml
+concurrency:
+  group: jules-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+```
+
+The group scope ensures two cron ticks of the same playbook on the same branch cannot run concurrently. `cancel-in-progress: false` preserves in-flight sessions so Jules is not killed mid-PR.
+
+### 14.5 State sync between FlaggedIssue and GH Actions
+
+The dispatcher treats GH Actions-dispatched runs as first-class sessions in the FlaggedIssue state machine. Sync flow:
+
+1. For GH Actions-originated playbooks, the workflow writes a FlaggedIssue record stub (state = `dispatched`) to a staging branch via the GitHub API, then triggers `jules-invoke@v1`.
+2. The dispatcher polls `gh run list --workflow=jules-<playbook>.yml --limit 1 --json status,conclusion,databaseId,url` to detect the run and attach the run URL to the FlaggedIssue.
+3. On terminal Actions state (`completed` with conclusion `success` or `failure`), the dispatcher advances the FlaggedIssue to `draft-pr` or `failed` per section 3.2.
+4. The audit-log hook in section 9.2 fires on either terminal state, using the GH Actions run URL as one of the `linked_records`.
+
+### 14.6 When to prefer GH Actions vs Python dispatcher
+
+Decision rubric. Use GH Actions when all of the following hold:
+
+- The trigger condition is a GitHub event (`push`, `workflow_run`, `issues.labeled`, `schedule`, `workflow_dispatch`).
+- The dispatch scope is a single repo per run.
+- No cross-repo coordination is required at dispatch time.
+- The FlaggedIssue record can be synthesized from the event payload (no human-authored metadata required beyond what the event carries).
+
+Use the Python dispatcher when any of the following hold:
+
+- A human is the proximate author of the FlaggedIssue (4.6 new plugin scaffold).
+- Cross-repo paired issues must be validated before dispatch (`AGENTS.md` Section 7).
+- The dispatch originates from the Hermes agent reasoning loop, not from GitHub.
+- The retry needs custom backoff that differs from the GH Actions default rerun.
+- The FlaggedIssue requires `auto_ready_on_green: true` promotion logic that the dispatcher owns.
+
+In all cases, the audit-log-generator runs regardless of dispatch path. The governance posture is path-independent.
+
+## 15. Approval
 
 This document is a proposal. Nothing is built until the user signs off. The specific decisions that need explicit approval before implementation begins:
 

@@ -401,6 +401,7 @@ class JulesClient:
         branch: str = "main",
         parallel: int = 1,
         require_plan_approval: bool = True,
+        automation_mode: Optional[str] = "AUTO_CREATE_PR",
     ) -> dict:
         if not repo or not isinstance(repo, str):
             raise ValueError("repo must be a non-empty string")
@@ -421,6 +422,13 @@ class JulesClient:
             ],
             "parallel": parallel,
         }
+        # Jules AUTO_CREATE_PR: Jules opens the PR itself at the end of the
+        # session. When automation_mode is None the field is omitted and
+        # Jules falls back to its default (no auto PR).
+        if automation_mode is not None:
+            if not isinstance(automation_mode, str):
+                raise ValueError("automation_mode must be a string or None")
+            body["automationMode"] = automation_mode
         return self._request("POST", "sessions", body)
 
     def send_message(self, session_id: str, text: str) -> dict:
@@ -579,11 +587,19 @@ class Dispatcher:
         self,
         max_parallel: int = DEFAULT_MAX_PARALLEL,
         dry_run: bool = False,
+        automation_mode: Optional[str] = "AUTO_CREATE_PR",
+        require_plan_approval: bool = True,
     ) -> list[FlaggedIssue]:
         """Dispatch up to max_parallel queued issues to Jules.
 
         Dry run prints the intended API calls to stderr without making them.
         Returns the list of issues whose state changed.
+
+        automation_mode and require_plan_approval set the dispatcher-wide
+        defaults for every session created in this pass. Per-playbook
+        overrides are read from the optional playbook metadata schema
+        (see jules/schemas/playbook-metadata.schema.json) when present on
+        the FlaggedIssue under the `payload.playbook_metadata` key.
         """
         queued = self.store.list_by_state("queued")
         in_progress = self.store.list_by_state("dispatched") + self.store.list_by_state("in-progress")
@@ -603,11 +619,25 @@ class Dispatcher:
                 _log.error("playbook_missing id=%s err=%s", issue.id, exc)
                 continue
             full_prompt = _render_prompt(prompt, issue)
+            # Per-playbook overrides from payload.playbook_metadata.
+            per_playbook = (issue.payload or {}).get("playbook_metadata") or {}
+            effective_automation_mode = (
+                per_playbook["automation_mode"]
+                if "automation_mode" in per_playbook
+                else automation_mode
+            )
+            effective_require_plan_approval = (
+                bool(per_playbook["require_plan_approval"])
+                if "require_plan_approval" in per_playbook
+                else require_plan_approval
+            )
             if dry_run or self.client is None:
                 sys.stderr.write(
                     f"[dry-run] POST /sessions repo={issue.target_repo} "
                     f"branch={issue.target_branch} playbook={issue.playbook} "
-                    f"prompt_bytes={len(full_prompt)}\n"
+                    f"prompt_bytes={len(full_prompt)} "
+                    f"automation_mode={effective_automation_mode} "
+                    f"require_plan_approval={effective_require_plan_approval}\n"
                 )
                 continue
             try:
@@ -616,6 +646,8 @@ class Dispatcher:
                     prompt=full_prompt,
                     branch=issue.target_branch,
                     parallel=1,
+                    require_plan_approval=effective_require_plan_approval,
+                    automation_mode=effective_automation_mode,
                 )
             except JulesApiError as exc:
                 _log.error("create_session_failed id=%s status=%d", issue.id, exc.status_code)
