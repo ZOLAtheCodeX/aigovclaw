@@ -94,20 +94,44 @@ do
   run mkdir -p "\"${WORKSPACE}/${subdir}\""
 done
 
-# Step 3: copy or sync the AIGovOps skills catalogue.
-echo "[3/5] Syncing AIGovOps skills catalogue to ${WORKSPACE}/skills/aigovops/"
-SKILLS_SOURCE="${REPO_ROOT}/skills"
-if [[ -d "${SKILLS_SOURCE}" && -n "$(ls -A "${SKILLS_SOURCE}" 2>/dev/null || true)" ]]; then
-  run rsync -a --delete \
-    "\"${SKILLS_SOURCE}/\"" \
-    "\"${WORKSPACE}/skills/aigovops/\""
+# Step 3: install the AIGovOps catalogue (skills + plugins).
+#
+# The skills catalogue lives in the aigovops repo. This repo (aigovclaw)
+# contains only a README pointer under skills/. Sourcing order:
+#   1. An adjacent aigovops checkout at ../aigovops (fast, offline-friendly).
+#   2. Otherwise, clone aigovops from AIGOVOPS_REPO_URL.
+echo "[3/5] Installing AIGovOps catalogue (skills and plugins)"
+
+ADJACENT_AIGOVOPS="${REPO_ROOT}/../aigovops"
+AIGOVOPS_ROOT=""
+
+if [[ -d "${ADJACENT_AIGOVOPS}/skills" && -d "${ADJACENT_AIGOVOPS}/plugins" ]]; then
+  AIGOVOPS_ROOT="${ADJACENT_AIGOVOPS}"
+  echo "      Using adjacent aigovops checkout at ${AIGOVOPS_ROOT}"
 else
-  echo "      Local skills/ directory empty; pulling from ${AIGOVOPS_REPO_URL}"
+  echo "      Cloning aigovops from ${AIGOVOPS_REPO_URL}"
   TMP_CLONE="$(mktemp -d)"
-  run git clone --depth 1 "${AIGOVOPS_REPO_URL}" "\"${TMP_CLONE}\""
-  run rsync -a --delete \
-    "\"${TMP_CLONE}/skills/\"" \
-    "\"${WORKSPACE}/skills/aigovops/\""
+  run git clone --depth 1 "${AIGOVOPS_REPO_URL}" "\"${TMP_CLONE}/aigovops\""
+  AIGOVOPS_ROOT="${TMP_CLONE}/aigovops"
+fi
+
+run rsync -a --delete \
+  "\"${AIGOVOPS_ROOT}/skills/\"" \
+  "\"${WORKSPACE}/skills/aigovops/\""
+echo "      Skills deployed to ${WORKSPACE}/skills/aigovops/"
+
+run rsync -a --delete \
+  "\"${AIGOVOPS_ROOT}/plugins/\"" \
+  "\"${WORKSPACE}/plugins/aigovops/\""
+echo "      Plugins deployed to ${WORKSPACE}/plugins/aigovops/"
+
+# Copy the AIGovClaw tool registration module. This is Hermes-specific
+# and lives in aigovclaw (not aigovops).
+run cp -r "\"${REPO_ROOT}/tools\"" "\"${WORKSPACE}/tools\""
+echo "      Tool registration module deployed to ${WORKSPACE}/tools/"
+
+# Clean up the clone if we made one.
+if [[ -n "${TMP_CLONE:-}" ]]; then
   run rm -rf "\"${TMP_CLONE}\""
 fi
 
@@ -137,14 +161,38 @@ else
   echo "      Hermes check skipped."
 fi
 
-# Smoke-test: confirm a skill is readable at the expected path.
+# Smoke tests on filesystem state.
 if [[ "${DRY_RUN}" == "0" ]]; then
   SKILL_TEST="${WORKSPACE}/skills/aigovops/iso42001/SKILL.md"
-  if [[ -f "${SKILL_TEST}" ]]; then
-    echo "      iso42001 SKILL.md present: OK"
-  else
-    echo "      iso42001 SKILL.md missing at ${SKILL_TEST}. Investigate."
-    exit 3
+  PLUGIN_TEST="${WORKSPACE}/plugins/aigovops/audit-log-generator/plugin.py"
+  TOOLS_TEST="${WORKSPACE}/tools/registry.py"
+
+  for path in "${SKILL_TEST}" "${PLUGIN_TEST}" "${TOOLS_TEST}"; do
+    if [[ -f "${path}" ]]; then
+      echo "      OK: ${path}"
+    else
+      echo "      MISSING: ${path}"
+      exit 3
+    fi
+  done
+
+  # Tool-registry smoke test: register all 9 AIGovOps plugins as Hermes
+  # tools and verify the registry reports them read-only.
+  if command -v python3 >/dev/null 2>&1; then
+    echo "      Running tool-registry smoke test..."
+    PYTHONPATH="${WORKSPACE}" python3 - <<PYEOF
+import sys
+sys.path.insert(0, "${WORKSPACE}")
+from tools.aigovops_tools import register_aigovops_tools, unregister_all
+from tools.registry import REGISTRY
+unregister_all()
+names = register_aigovops_tools("${WORKSPACE}/plugins/aigovops")
+assert len(names) == 9, f"expected 9 tools, got {len(names)}"
+for n in names:
+    desc = REGISTRY.describe(n)
+    assert desc["safety"]["is_read_only"] is True
+print(f"      Tool registry: {len(names)} tools registered, all read-only")
+PYEOF
   fi
 fi
 
