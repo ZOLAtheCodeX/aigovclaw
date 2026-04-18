@@ -240,6 +240,18 @@ def test_route_batch_preserves_order():
     assert results[1]["artifact_type"] == "risk-register"
 
 
+def test_get_nested():
+    obj = {"a": {"b": {"c": 1}}}
+    assert router._get_nested(obj, "a.b.c") == 1
+    assert router._get_nested(obj, "a.x.c") is None
+    assert router._get_nested(obj, "a.b.c.d") is None
+    assert router._get_nested(obj, "x") is None
+    assert router._get_nested(obj, "") is None
+    assert router._get_nested(None, "a") is None
+    assert router._get_nested([1, 2], "a") is None
+    assert router._get_nested("string", "a") is None
+
+
 def _run_all():
     import inspect
     tests = [(n, o) for n, o in inspect.getmembers(sys.modules[__name__])
