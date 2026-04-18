@@ -67,11 +67,11 @@ def _apply_property_mapping(source: dict[str, Any], mapping: dict[str, str]) -> 
 
 def _is_multi_row(artifact_type: str) -> bool:
     """Artifact types where the artifact dict contains a list of rows to route individually."""
-    return artifact_type in (
+    return artifact_type in {
         "risk-register",
         "soa",
         "nonconformity-register",
-    )
+    }
 
 
 def _rows_key(artifact_type: str) -> str:
