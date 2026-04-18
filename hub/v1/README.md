@@ -48,7 +48,7 @@ generator prints a clear maintainer-action message and exits with code 2.
 
 Drop these two files into `hub/v1/vendor/`:
 
-```
+```text
 hub/v1/vendor/react.production.min.js
 hub/v1/vendor/react-dom.production.min.js
 ```
@@ -100,7 +100,7 @@ Same 11 panels as v0, reshaped:
 
 ## Generate
 
-```
+```python
 python3 -m aigovclaw.hub.v1.cli generate --output hub-v1.html
 ```
 
@@ -109,7 +109,7 @@ Override the evidence path with `--evidence /path` or
 
 ## Serve
 
-```
+```python
 python3 -m aigovclaw.hub.v1.cli serve --port 8080 --open
 ```
 
@@ -117,7 +117,7 @@ Same stdlib `http.server` as v0. Binds to `127.0.0.1` by default.
 
 ## Tests
 
-```
+```python
 python3 hub/v1/tests/test_v1_generator.py
 ```
 
