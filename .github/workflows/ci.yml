@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  markdown-lint:
+    name: Markdown lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run markdownlint
+        uses: DavidAnson/markdownlint-cli2-action@v16
+        with:
+          globs: |
+            **/*.md
+            !node_modules
+
+  tool-registry-tests:
+    name: Tool registry tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout aigovclaw
+        uses: actions/checkout@v4
+        with:
+          path: aigovclaw
+
+      - name: Checkout aigovops
+        uses: actions/checkout@v4
+        with:
+          repository: ZOLAtheCodeX/aigovops
+          path: aigovops
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run tool registry tests
+        env:
+          AIGOVOPS_PLUGINS_PATH: ${{ github.workspace }}/aigovops/plugins
+        working-directory: aigovclaw
+        run: python3 tools/tests/test_registry.py
+
+  mcp-router-tests:
+    name: MCP router tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run MCP router tests
+        run: python3 adapters/mcp/tests/test_router.py
+
+  install-smoke-test:
+    name: install.sh dry-run smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout aigovclaw
+        uses: actions/checkout@v4
+        with:
+          path: aigovclaw
+
+      - name: Checkout aigovops alongside
+        uses: actions/checkout@v4
+        with:
+          repository: ZOLAtheCodeX/aigovops
+          path: aigovops
+
+      - name: Dry-run install
+        working-directory: aigovclaw
+        run: bash install.sh --dry-run --skip-hermes-check --workspace /tmp/hermes-ci-dryrun
+
+      - name: Real install against local aigovops and verify tool registry
+        working-directory: aigovclaw
+        run: |
+          rm -rf /tmp/hermes-ci-real
+          bash install.sh --skip-hermes-check --workspace /tmp/hermes-ci-real
+          # The install.sh Step 5 smoke test already runs; this check is a fallback.
+          test -f /tmp/hermes-ci-real/tools/registry.py
+          test -f /tmp/hermes-ci-real/plugins/aigovops/audit-log-generator/plugin.py
+          test -f /tmp/hermes-ci-real/skills/aigovops/iso42001/SKILL.md

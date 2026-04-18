@@ -1,118 +1,131 @@
 # adapters/
 
-Push-adapter layer for AIGovClaw. Each adapter translates canonical AIGovOps plugin output dicts into the schema of an external destination (a GRC platform, a structured workspace tool, an email digest, or a ticketing system) and pushes the translated artifact there.
+Artifact distribution layer for AIGovClaw. Canonical AIGovOps plugin output dicts (source of record under `~/.hermes/memory/aigovclaw/`) are routed to external destinations so that governance artifacts land where the organization already reads them.
 
-Status: **design scaffold** for Phase 4. The adapter contract is defined below. Concrete adapter implementations (Notion, Archer, ServiceNow GRC, Drata, Vanta, Linear, Jira) land when the user selects a destination during onboarding.
+## Design decision: MCP-first
 
-## Why the adapter layer exists
+AIGovClaw routes artifacts through [Model Context Protocol (MCP)](https://modelcontextprotocol.io) servers rather than implementing destination-specific HTTP adapters in-house. Rationale:
 
-AIGovClaw's plugins produce canonical artifact dicts (SoA rows, risk register rows, AISIA sections, KPI records, and so on) with stable field names. The dicts live locally in `~/.hermes/memory/aigovclaw/<artifact>/` as the source of record. To make the artifacts visible in the organization's existing GRC tooling, the adapter layer reads these dicts and pushes them to the user's selected destination in that platform's native schema.
+1. **Reuse over reinvention.** MCP servers already exist for Notion, Linear, Google Drive, GitHub, Gmail, and dozens of other destinations. Writing custom Python clients for each would duplicate work that the MCP ecosystem has already done better.
+2. **Credential handling.** MCP servers handle their own auth against destination APIs. AIGovClaw never touches destination credentials; the Hermes harness invokes MCP tools through the protocol, and the MCP server authenticates on its own.
+3. **Destination schema drift is upstream's problem.** When Notion's API changes, the Notion MCP server updates. AIGovClaw keeps its artifact schema stable and translates at the MCP-tool-invocation boundary.
+4. **User onboarding is simpler.** Users configure MCP servers once in their Hermes environment; AIGovClaw inherits every configured server as a potential destination.
 
-The separation is deliberate. Plugins do not know about destinations. Adapters do not know about frameworks. If a new GRC platform emerges, one new adapter covers every existing plugin; if a new plugin lands, every existing adapter already handles it.
+## The router's job
 
-## Adapter contract
+This directory contains one working adapter (`local-filesystem/`, the source-of-record baseline) and one router (`mcp/`). The router translates AIGovClaw artifact dicts into MCP tool-invocation specifications the Hermes harness executes.
 
-Every adapter exposes the following interface.
-
-### Required
-
-```python
-class Adapter:
-    """Push AIGovClaw artifacts to an external destination."""
-
-    name: str  # kebab-case identifier, for example "notion"
-    version: str  # semver, for example "0.1.0"
-
-    def __init__(self, config: dict):
-        """Initialize with user-supplied config (credentials, target URLs,
-        schema overrides). Credentials are pulled from the Hermes secret
-        store via the runtime, not embedded here."""
-
-    def health_check(self) -> dict:
-        """Return {status: 'ok' | 'degraded' | 'error', detail: str}.
-        Called during installation and periodically by the runtime."""
-
-    def push_artifact(self, artifact: dict, artifact_type: str) -> dict:
-        """Translate and push a single artifact. Returns a dict with
-        {status: 'ok' | 'error', destination_ref: str | None,
-         error: str | None, pushed_at: ISO-8601-UTC}."""
-
-    def supported_artifact_types(self) -> list[str]:
-        """Return the list of artifact_type strings this adapter handles.
-        Valid types: 'audit-log-entry', 'risk-register-row', 'SoA-row',
-        'AISIA-section', 'role-matrix', 'review-minutes',
-        'nonconformity-record', 'KPI', 'gap-assessment'."""
-```
-
-### Optional
+The router does NOT call destinations directly. It produces:
 
 ```python
-    def pull_feedback(self, since: str) -> list[dict]:
-        """Pull back changes the user made in the external platform since
-        the supplied timestamp, so AIGovClaw's local source of record
-        stays consistent. Not every platform supports round-trip sync;
-        adapters that do not should raise NotImplementedError here."""
-
-    def batch_push(self, artifacts: list[tuple[dict, str]]) -> list[dict]:
-        """Push multiple artifacts in one operation when the destination
-        supports batch APIs. Default implementation calls push_artifact
-        in a loop."""
+[
+    {
+        "mcp_server": "notion",
+        "tool_name": "notion-create-page",
+        "arguments": {
+            "parent": {"database_id": "<user-configured>"},
+            "properties": { ... translated from the artifact ... },
+            ...
+        },
+        "action_tag": "action-required-human",  # or high/low confidence
+        "source_artifact_type": "risk-register-row",
+    },
+    ...
+]
 ```
 
-## Action-item classification on every push
+The Hermes harness reads this list and invokes the MCP tools in sequence (or in parallel where the tools are concurrency-safe). Success and failure for each invocation are logged to `~/.hermes/memory/aigovclaw/audit-log/` per the audit-log workflow.
 
-Every pushed artifact carries a user-facing tag derived from the artifact's warnings and the organization's threshold policy:
+## Concrete adapters in this directory
 
-- `action-required-human`: the artifact contains warnings the agent cannot resolve autonomously (missing owner, ambiguous classification, blocked-for-review items). The human needs to act.
-- `completed-autonomously-high-confidence`: the artifact is complete, warnings are absent or cosmetic, and the classification or scoring is grounded in explicit evidence. No action required; informational only.
-- `completed-autonomously-low-confidence`: the artifact is complete but the underlying evidence is thin or the framework guidance is ambiguous. The human should review but is not blocked.
+| Directory | Purpose | Status |
+|---|---|---|
+| `local-filesystem/` | Baseline adapter that writes artifacts to `~/.hermes/memory/aigovclaw/<artifact-type>/`. The source of record; every AIGovClaw workflow writes here first. | working |
+| `mcp/` | Router that translates artifacts into MCP tool-invocation specifications. Configuration-driven; the user declares which artifact types route to which MCP tools. | working |
 
-The tag drives rendering on the destination platform: `action-required-human` items land in a dedicated queue; `completed-autonomously-high-confidence` items land in a log or digest; `completed-autonomously-low-confidence` items land in a review queue with lower priority.
+## Action-item classification
 
-## Onboarding flow (Phase 4)
+Every artifact pushed through any adapter carries an action-item tag derived from the artifact's warnings and organizational threshold policy:
 
-At `./install.sh` time, the user selects their preferred adapter or adapters. The installer:
+- `action-required-human`: the artifact contains warnings the agent cannot resolve autonomously. The human needs to act. Rendered on the destination as a high-priority item or in a dedicated queue.
+- `completed-autonomously-high-confidence`: complete, warnings absent or cosmetic, classification grounded in explicit evidence. Informational.
+- `completed-autonomously-low-confidence`: complete but the underlying evidence is thin or framework guidance is ambiguous. Human should review but is not blocked.
 
-1. Lists available adapters from this directory.
-2. Prompts the user for destination configuration (Notion workspace URL and database ID, Archer endpoint and credentials, and so on).
-3. Validates connection via `health_check()`.
-4. Registers the adapter in `config/hermes.yaml` under an `adapters:` block.
-5. Writes a test artifact to confirm round-trip.
+The tag is computed by the router from the artifact dict before routing. Destinations receive it as a property on every pushed page or record.
 
-At runtime, the agent's workflow emissions route through every registered adapter that supports the artifact's type. Destinations receive the full artifact, not a digest; auditors need evidence, not summaries.
+## Configuration model
 
-## Non-goals of the adapter layer
+Adapter configuration lives in `config/adapters.yaml` alongside the Hermes runtime config. Structure:
 
-- Adapters do NOT modify artifact content. Translation is schema mapping only; the data is immutable in transit.
-- Adapters do NOT filter items. Every artifact the plugin produces goes through. The human-facing platform handles prioritization.
-- Adapters do NOT retry on the agent's behalf without explicit user authorization. A push failure is logged; whether to retry is a user decision per AGENTS.md Section 3 "behaviors refused regardless of instruction" (no silent retry on failure).
-- Adapters do NOT cross-write across destinations. If a user switches from Notion to Drata, prior Notion pushes stay in Notion; new artifacts go to Drata. Migration is a separate tool, not an adapter responsibility.
+```yaml
+adapters:
+  local-filesystem:
+    enabled: true          # source of record, always on
+    base_path: ~/.hermes/memory/aigovclaw
 
-## Planned concrete adapters
+  mcp:
+    enabled: true
+    routes:
+      risk-register-row:
+        - mcp_server: notion
+          tool_name: notion-create-page
+          arguments:
+            parent: {database_id: "<your-notion-risk-register-db-id>"}
+          property_mapping:
+            Title: "description"
+            System: "system_name"
+            Category: "category"
+            Likelihood: "likelihood"
+            Impact: "impact"
+            Residual: "residual_score"
+            Owner: "owner_role"
 
-The following adapters will be implemented in Phase 4 as user demand confirms them. Each will live in its own subdirectory with `adapter.py`, `README.md`, and tests.
+      nonconformity-record:
+        - mcp_server: linear
+          tool_name: linear-create-issue
+          arguments:
+            team: "<your-linear-team-id>"
+          property_mapping:
+            title: "description"
+            state: "status"
+            description: "root_cause"
 
-| Adapter | Destination | Priority | Notes |
-|---|---|---|---|
-| `local-filesystem` | the existing `~/.hermes/memory/aigovclaw/` write path | first | Null adapter; already implicit in every workflow. Formalizes the baseline. |
-| `notion` | Notion workspace databases | high | Covers personal and small-team deployments. Schema per database. |
-| `linear` | Linear issues | medium | Action-required items become issues; other items become comments or labels. |
-| `drata` | Drata GRC platform | medium | API-based push; action items become tasks. |
-| `vanta` | Vanta GRC platform | medium | Similar to Drata. |
-| `servicenow-grc` | ServiceNow GRC module | low-medium | Enterprise deployments. |
-| `archer` | Archer GRC | low | Enterprise deployments. |
-| `email-digest` | SMTP summary emails | low | Fallback for environments with no primary GRC surface. |
+      audit-log-entry:
+        - mcp_server: google-drive
+          tool_name: google-drive-create-document
+          arguments:
+            folder_id: "<your-drive-folder-id>"
 
-## Security posture
+      # Any artifact type can have zero, one, or many routes.
+      # Routes are non-exclusive: a risk-register-row can land in
+      # Notion AND Linear simultaneously.
+```
 
-Adapters handle the most security-sensitive step in the entire AIGovClaw flow: they send governance artifacts to external systems. Accordingly:
+The router ships with no default routes; users configure per their MCP setup.
 
-- Every adapter push emits an audit-log entry citing `ISO/IEC 42001:2023, Clause 7.5.3` (distribution) naming the adapter, the destination, and the artifact pushed.
-- Credentials are never stored in this directory. Every adapter reads from the Hermes secret store per `config/hermes.yaml` references. Hardcoded credentials in an adapter are a security bug blocking merge.
-- Adapters run in the same Hermes permission posture as the rest of AIGovClaw. A tier-restricted permission for external network writes is appropriate; the default posture permits outbound HTTPS to the configured destinations only.
-- Health checks run in the background; failures surface to the review queue with the destination name and the error detail (never the credential).
-- On adapter removal (user decides to stop syncing to a destination), the adapter leaves historical pushes in place at the destination and stops new pushes. No destructive cleanup.
+## Onboarding
+
+1. User configures MCP servers in their Hermes environment (outside AIGovClaw scope).
+2. User creates `config/adapters.yaml` with routes for the artifact types they care about.
+3. AIGovClaw workflows emit artifacts; the MCP router translates each into tool-invocation specs; Hermes executes.
+
+There is no `aigovclaw install adapter notion` step. Adapters are configuration, not installation.
+
+## Security
+
+Adapters handle the most security-sensitive step in AIGovClaw: distributing governance artifacts to external systems. Defenses:
+
+- Every MCP-routed push emits an audit-log entry citing `ISO/IEC 42001:2023, Clause 7.5.3` (distribution), naming the MCP server, the tool, and the artifact identifier.
+- Credentials never appear in `config/adapters.yaml`. They live in the MCP server's own configuration (per-server, typically in OS keychain or environment variables).
+- Invocation failures surface to the review queue with the MCP server name and tool name; credentials never appear in error messages.
+- On adapter removal (user decides to stop syncing to an MCP destination), historical pushes remain at the destination. No destructive cleanup.
 
 ## Cross-repository coordination
 
-Adapter contract changes require coordinated updates with plugin output schemas. If a plugin field rename would break an adapter's schema mapping, the plugin version bumps (AGENT_SIGNATURE changes) and every registered adapter is checked for compatibility before the plugin lands on main.
+Adapter configuration changes are aigovclaw-local (no aigovops impact). Plugin output schema changes (which affect the `property_mapping` translators) require coordinated adapter-config updates and should bump the plugin `AGENT_SIGNATURE` per the AIGovOps plugin-author contract.
+
+## What this directory does NOT include
+
+- **Destination-specific Python HTTP clients.** Those belong in the MCP server ecosystem, not here.
+- **Credentials, tokens, or API keys.** Those live in the MCP server's own config.
+- **Retry or queue infrastructure.** MCP tool invocation is the harness's responsibility. A failed invocation is logged; retry policy is organizational policy, not hardcoded here.
