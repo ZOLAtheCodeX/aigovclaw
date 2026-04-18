@@ -1,0 +1,30 @@
+# AIGovClaw: Hermes Agent Configuration
+# Security-first defaults. Do not relax permissions without explicit review and documented justification.
+
+# Model: configure your preferred provider
+model:
+  provider: null  # Set via: hermes model
+  fallback: null
+
+# Memory
+memory:
+  backend: local
+  path: ~/.hermes/memory/aigovclaw/
+
+# Tool permissions: most restrictive defaults
+# Changes to this section are subject to AGENTS.md restrictions: no autonomous edits.
+tools:
+  filesystem:
+    read: true
+    write: false      # Enable only for audit log and report generation workflows
+    shell: false      # Never enable without explicit user confirmation per task
+  web:
+    search: true
+    fetch: true
+  email: false        # Not needed for governance workflows
+  calendar: false
+
+# Scheduled compliance monitoring: configure once Phase 3 is active
+cron:
+  framework_monitor: null     # e.g., "0 9 * * 1": weekly Monday 09:00
+  compliance_check: null      # e.g., "0 8 * * *": daily 08:00
