@@ -1,43 +1,60 @@
 # AGENTS.md
 
-Instructions for AI agents (Jules, Claude Code, Codex CLI, Cursor, and others) operating on this repository.
+Instructions for AI agents (Jules, Claude Code, Codex CLI, Cursor, and others) operating on this repository. Read top to bottom before any action. The authoritative cross-repository quality rules live in [aigovops/AGENTS.md](https://github.com/ZOLAtheCodeX/aigovops/blob/main/AGENTS.md). That file takes precedence where any rule in this file is ambiguous or silent.
 
-## What this repository is
+## 1. Prohibited content (applies everywhere, no exceptions)
 
-AIGovClaw is the Hermes Agent configuration package for AIGovOps. It is the runtime that consumes the framework-agnostic catalogue at [aigovops/aigovops](https://github.com/ZOLAtheCodeX/aigovops). This repository contains the installer, the agent persona, the workflow definitions, and the security-scoped Hermes configuration.
+The following are not acceptable in any file, commit message, PR title, PR body, issue title, issue body, code comment, docstring, YAML value, or agent-generated output in this repository.
 
-This is a configuration repository. It is not a library. It does not export importable modules. It is consumed by humans running `./install.sh` and by Hermes Agent reading the files placed in `~/.hermes/` after install.
+- **No emojis.** Not in PR titles, not in PR bodies, not in commit messages, not in issue templates, not in file names, not in markdown headings, not in code comments. Plain text only.
+- **No em-dashes (the U+2014 character).** Use a colon, a comma, parentheses, or restructure.
+- **No hedging language.** Specifically prohibited: `may want to consider`, `might be helpful to`, `could potentially`, `it is possible that`, `you might find`, `we suggest you might`.
 
-## Files that must NEVER be modified autonomously
+If you are an automated agent and your default output style violates these rules, override your default.
 
-The following files require a human-approved GitHub issue before any change. Do not edit, rename, or delete them on your own initiative even if the change appears beneficial.
+## 2. Lane boundaries
 
-- `persona/SOUL.md`: the agent persona is a load-bearing trust artifact. Persona changes affect every output.
-- `SECURITY.md`: security policy changes require explicit review.
-- `LICENSE`: license changes require explicit review.
-- `config/hermes.yaml`, security section only: the `tools` block defines the agent's permission boundary. Loosening permissions autonomously is prohibited. Other sections of `hermes.yaml` (memory backend, model selection scaffolding, cron schedules) may be edited per the rules below.
+This repository is a runtime configuration package. Two lanes:
 
-## What you can do autonomously with an approved issue
+### Tactical-layer lane (Jules, Copilot, any infrastructure agent)
 
-With a referenced issue that has been triaged and assigned, you may:
+- `install.sh` except the security-sensitive steps (Hermes verification, permission application). Changes to non-security steps are acceptable with an approved issue.
+- `skills/` directory sync scripts and documentation. Skill content itself is sourced from [aigovops](https://github.com/ZOLAtheCodeX/aigovops); this directory is populated at install time.
+- `config/hermes.yaml` outside the `tools:` security block. The `tools:` block (filesystem, shell, web, email, calendar permissions) is NOT autonomously editable.
+- Workflow documentation improvements in `workflows/*.md` that clarify existing steps without changing their meaning.
 
-- Add new workflow stubs under `workflows/` following the existing naming and structure.
-- Update `skills/` content (this directory is sourced from [aigovops/aigovops](https://github.com/ZOLAtheCodeX/aigovops); the rule here is that you may sync from the upstream catalogue, not invent new skill content).
-- Update non-security steps in `install.sh` (for example, adding a new verification step or improving error messages).
-- Update workflow documentation files.
-- Update `config/hermes.yaml` sections outside the `tools` security block.
+### Reasoning-layer lane (Claude Code or a designated reasoning agent; no tactical-agent edits)
 
-## Authoritative quality standard
+- `persona/SOUL.md` (the agent persona is a load-bearing trust artifact).
+- `workflows/*.md` step sequences, quality gates, and output artifact specifications. Editorial clarifications to existing steps are dual-lane.
+- This file (`AGENTS.md`).
 
-The canonical quality standard for all AIGovClaw outputs, and for any content you write in this repository, is [aigovops/STYLE.md](https://github.com/ZOLAtheCodeX/aigovops/blob/main/STYLE.md). Read it before writing anything. The same prohibitions apply here:
+## 3. Files that must NEVER be modified autonomously
 
-- No emojis in any output, file, comment, commit message, or PR description.
-- No em-dashes (the U+2014 character).
-- No hedging language ("may want to consider", "might be helpful to", "could potentially").
-- All framework citations use the formats specified in STYLE.md.
+These require a human-approved GitHub issue before any change, from any lane.
 
-The aigovops repository AGENTS.md ([aigovops/AGENTS.md](https://github.com/ZOLAtheCodeX/aigovops/blob/main/AGENTS.md)) is also authoritative for cross-cutting concerns. Read it.
+- `SECURITY.md`
+- `LICENSE`
+- `persona/SOUL.md`
+- `config/hermes.yaml` `tools:` security block (the permission defaults for filesystem, shell, web, email, calendar).
 
-## Cross-repository coordination
+## 4. Quality gates
 
-When changes here require corresponding changes in [aigovops/aigovops](https://github.com/ZOLAtheCodeX/aigovops) (or vice versa), open a tracking issue in both repositories and link them. Do not merge half a coordinated change.
+Every PR must satisfy, regardless of lane or author:
+
+1. No prohibited content (emojis, em-dashes, hedging) in title, body, commit messages, or changed files.
+2. PR title follows `<type>: <imperative summary>` with `<type>` from `feat`, `fix`, `chore`, `docs`, `ci`, `test`, `refactor`, `security`. No emoji prefix.
+3. Commits are signed off by the author or by the agent's configured author identity.
+4. If touching `install.sh`, include a plain-language test note stating how the change was validated (local test, clean-machine test, or deferred to Phase 3).
+
+## 5. What this repository is
+
+AIGovClaw is the Hermes Agent configuration package for AIGovOps. It consumes the framework-agnostic catalogue at [aigovops](https://github.com/ZOLAtheCodeX/aigovops). This repository contains the installer, the agent persona, the workflow definitions, and the security-scoped Hermes configuration. It is not a library and does not export importable modules.
+
+## 6. Authoritative quality standard
+
+The canonical quality standard for all AIGovClaw outputs, and for any content written in this repository, is [aigovops/STYLE.md](https://github.com/ZOLAtheCodeX/aigovops/blob/main/STYLE.md). Read it before writing anything.
+
+## 7. Cross-repository coordination
+
+When changes here require corresponding changes in [aigovops](https://github.com/ZOLAtheCodeX/aigovops) (or vice versa), open a tracking issue in both repositories and link them. Do not merge half a coordinated change.
