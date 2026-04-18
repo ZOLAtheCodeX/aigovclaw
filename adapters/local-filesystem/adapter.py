@@ -23,7 +23,7 @@ from typing import Any
 ADAPTER_NAME = "local-filesystem"
 ADAPTER_VERSION = "0.1.0"
 
-SUPPORTED_ARTIFACT_TYPES = (
+SUPPORTED_ARTIFACT_TYPES = frozenset((
     "audit-log-entry",
     "risk-register-row",
     "SoA-row",
@@ -37,7 +37,7 @@ SUPPORTED_ARTIFACT_TYPES = (
     "metrics-report",
     "soa",
     "aisia",
-)
+))
 
 
 def _utc_now_iso() -> str:
@@ -86,14 +86,14 @@ class LocalFilesystemAdapter:
         return {"status": "ok", "detail": f"writing to {self.base_path}"}
 
     def supported_artifact_types(self) -> list[str]:
-        return list(SUPPORTED_ARTIFACT_TYPES)
+        return sorted(SUPPORTED_ARTIFACT_TYPES)
 
     def push_artifact(self, artifact: dict[str, Any], artifact_type: str) -> dict[str, Any]:
         if artifact_type not in SUPPORTED_ARTIFACT_TYPES:
             return {
                 "status": "error",
                 "destination_ref": None,
-                "error": f"unsupported artifact_type {artifact_type!r}; adapter supports {list(SUPPORTED_ARTIFACT_TYPES)}",
+                "error": f"unsupported artifact_type {artifact_type!r}; adapter supports {sorted(SUPPORTED_ARTIFACT_TYPES)}",
                 "pushed_at": _utc_now_iso(),
             }
         if not isinstance(artifact, dict):
