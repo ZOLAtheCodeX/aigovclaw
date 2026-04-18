@@ -143,26 +143,20 @@ class ToolRegistry:
     def describe_all(self) -> list[dict[str, Any]]:
         return [self.describe(name) for name in self.list_tools()]
 
-    def validate_inputs(self, name: str, inputs: dict[str, Any]) -> list[str]:
-        """Check inputs against the tool's declared schema. Returns a list
-        of validation error strings; empty list means inputs are valid."""
-        tool = self.get(name)
-        errors: list[str] = []
-        if not isinstance(inputs, dict):
-            return ["inputs must be a dict"]
-
-        # Required fields present.
-        for field_name, spec in tool.input_schema.items():
+    def _validate_required_fields(self, input_schema: dict[str, Any], inputs: dict[str, Any], errors: list[str]) -> None:
+        """Check that all required fields from the schema are present in inputs."""
+        for field_name, spec in input_schema.items():
             if spec.get("required", False) and field_name not in inputs:
                 errors.append(f"required field {field_name!r} missing")
 
-        # Field types and enums.
+    def _validate_field_types(self, input_schema: dict[str, Any], inputs: dict[str, Any], errors: list[str]) -> None:
+        """Check that all provided inputs match their declared types and enums."""
         for field_name, value in inputs.items():
-            if field_name not in tool.input_schema:
+            if field_name not in input_schema:
                 # Extra fields are not an error by default; the handler
                 # may choose to tolerate them. Flag for visibility.
                 continue
-            spec = tool.input_schema[field_name]
+            spec = input_schema[field_name]
             enum = spec.get("enum")
             if enum is not None and value not in enum:
                 errors.append(f"field {field_name!r} value {value!r} not in enum {enum}")
@@ -171,6 +165,17 @@ class ToolRegistry:
                 errors.append(
                     f"field {field_name!r} has wrong type: expected {declared_type}, got {type(value).__name__}"
                 )
+
+    def validate_inputs(self, name: str, inputs: dict[str, Any]) -> list[str]:
+        """Check inputs against the tool's declared schema. Returns a list
+        of validation error strings; empty list means inputs are valid."""
+        tool = self.get(name)
+        errors: list[str] = []
+        if not isinstance(inputs, dict):
+            return ["inputs must be a dict"]
+
+        self._validate_required_fields(tool.input_schema, inputs, errors)
+        self._validate_field_types(tool.input_schema, inputs, errors)
 
         return errors
 
