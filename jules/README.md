@@ -1,5 +1,11 @@
 # Jules Integration (AIGovClaw)
 
+> **MAINTAINER TOOLING. Not a product feature.**
+>
+> This module is internal tooling for the AIGovOps maintainers (Zola + Claude Code). It is not distributed as part of the AIGovClaw runtime. End-users running AIGovClaw do not invoke, configure, or encounter Jules. The `dispatch_jules_session` tool is deliberately NOT registered in the Hermes tool registry. This module lives in the public repo for transparency; it is not a feature.
+>
+> Category: same as CI workflows, dependabot configuration, pre-commit hooks. Infrastructure for repository maintenance.
+
 Operator-facing documentation for the Jules dispatcher. Jules is Google's autonomous async coding agent. This module wraps Jules as a background maintenance worker for the AIGovOps catalogue. For the full design rationale, see `docs/jules-integration-design.md`.
 
 ## Overview

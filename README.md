@@ -60,3 +60,11 @@ All workflows in this repository, and all skill outputs they consume, are held t
 ## Security
 
 See [SECURITY.md](SECURITY.md).
+
+## Maintainer tooling (not a product feature)
+
+The following subdirectories exist for repository maintenance only. They are not invoked by end-users and not registered as Hermes tools. Treat them the way you would treat CI workflows or dependabot configuration.
+
+- [jules/](jules/): Google Jules dispatcher + 8 playbook prompt templates. Used by the maintainers to automate low-judgment repo maintenance (framework text drift, test coverage gaps, dependency bumps, citation drift fixes, markdown lint regressions). See [docs/jules-integration-design.md](docs/jules-integration-design.md) for the rationale.
+- [.github/workflows/jules-*.yml](.github/workflows/): GitHub Actions that invoke Jules via `google-labs-code/jules-invoke@v1` on cron or event triggers. Require `JULES_API_KEY` in repo secrets; fail fast with a clear message if missing.
+

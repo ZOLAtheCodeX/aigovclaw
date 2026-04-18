@@ -13,8 +13,6 @@ Artifact-type subdirectories recognized:
   - metrics/             (KPI metrics-collector output)
   - gap-assessment/
   - classification/      (EU AI Act classifier output)
-  - jules/flagged/       (FlaggedIssue records, active)
-  - jules/archive/       (FlaggedIssue records, closed)
   - action-required/     (artifacts tagged action-required-human by the MCP router)
 
 Each JSON file under a subdirectory is read once. For "latest per system"
@@ -46,8 +44,6 @@ ARTIFACT_DIRS = {
     "metrics": "metrics",
     "gap-assessment": "gap-assessment",
     "classification": "classification",
-    "jules-flagged": "jules/flagged",
-    "jules-archive": "jules/archive",
     "action-required": "action-required",
 }
 
@@ -384,48 +380,6 @@ def _panel_eu(store: Store) -> str:
     )
 
 
-def _panel_jules(store: Store) -> str:
-    combined = list(store.artifacts.get("jules-flagged", [])) + list(
-        store.artifacts.get("jules-archive", [])
-    )
-    combined.sort(key=lambda a: a.mtime, reverse=True)
-    recent = combined[:10]
-    if not recent:
-        body = '<p style="color: var(--text-dim); font-family: var(--font-display); font-size: 13px;">No Jules activity recorded.</p>'
-    else:
-        rows = []
-        for a in recent:
-            d = a.data
-            playbook = d.get("playbook", "")
-            state = d.get("state", "")
-            repo = d.get("target_repo", "")
-            pr_url = d.get("pr_url") or d.get("pull_request_url") or ""
-            pr_cell = (
-                f'<a href="{e(pr_url)}">PR</a>' if pr_url.startswith("https://github.com") else e(pr_url)
-            )
-            rows.append(
-                f'<tr>'
-                f'<td class="mono">{e(playbook)}</td>'
-                f'<td><span class="badge">{e(state)}</span></td>'
-                f'<td class="mono">{e(repo)}</td>'
-                f'<td class="mono">{pr_cell}</td>'
-                f'<td><a href="{e(a.rel_href)}">source</a></td>'
-                f'</tr>'
-            )
-        body = (
-            '<table><thead><tr>'
-            '<th>Playbook</th><th>State</th><th>Target</th><th>PR</th><th>Source</th>'
-            '</tr></thead><tbody>'
-            + "".join(rows)
-            + '</tbody></table>'
-        )
-    return (
-        '<section class="panel wide"><h2><span class="num">08</span>Recent Jules activity</h2>'
-        + body
-        + '</section>'
-    )
-
-
 def _panel_action_required(store: Store) -> str:
     arts = store.artifacts.get("action-required", [])
     if not arts:
@@ -498,7 +452,6 @@ def render(store: Store, *, generated_at: str | None = None) -> str:
     ]
     panels_wide = [
         _panel_eu(store),
-        _panel_jules(store),
         _panel_action_required(store),
     ]
 

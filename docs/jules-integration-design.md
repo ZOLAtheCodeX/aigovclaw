@@ -1,11 +1,13 @@
 # Jules Integration Design Proposal
 
-Status: DRAFT for user review. Not approved. No implementation yet.
+> **Scope: maintainer tooling only.** Jules is internal infrastructure for the AIGovOps maintainers to keep the two public repos healthy (framework text drift, test coverage gaps, dependency bumps, citation drift, lint regressions). It is NOT a product feature, NOT exposed to AIGovClaw end-users, and NOT distributed as part of the runtime. The `dispatch_jules_session` tool is deliberately absent from the Hermes tool registry. Treat this document the way you would treat a `.github/dependabot.yml` design rationale: repository maintenance, not product surface.
+
+Status: active. Dispatcher, playbooks, GH Actions workflows, and audit loop shipped 2026-04-18.
 Owner: Zola Valashiya
 Target repos: `aigovclaw` (this repo) and `aigovops` (sibling catalogue)
 Date: 2026-04-18
 
-This document proposes how Google Jules is wired into AIGovClaw as a background maintenance worker for the AIGovOps catalogue. It covers role split, dispatch model, playbook entries, failure handling, governance audit, cost, open questions, non-goals, and a phased rollout. It contains no code. After approval, implementation lands in a separate PR.
+This document describes how Google Jules is wired into AIGovClaw as a background maintenance worker for the AIGovOps catalogue. It covers role split, dispatch model, playbook entries, failure handling, governance audit, cost, resolved decisions, non-goals, and a phased rollout.
 
 ## 1. Objective
 

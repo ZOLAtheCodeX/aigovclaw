@@ -134,28 +134,6 @@ def _seed(base: Path) -> None:
              "AGENT_SIGNATURE": "aigovops.eu-classifier@0.2.0"},
         )
     _write(
-        base / "jules" / "flagged" / "01JA.json",
-        {
-            "id": "01JA",
-            "playbook": "framework-drift",
-            "target_repo": "ZOLAtheCodeX/aigovops",
-            "state": "flagged",
-            "pr_url": "",
-            "AGENT_SIGNATURE": "aigovclaw.jules@0.1.0",
-        },
-    )
-    _write(
-        base / "jules" / "archive" / "01JB.json",
-        {
-            "id": "01JB",
-            "playbook": "citation-drift",
-            "target_repo": "ZOLAtheCodeX/aigovops",
-            "state": "merged",
-            "pr_url": "https://github.com/ZOLAtheCodeX/aigovops/pull/42",
-            "AGENT_SIGNATURE": "aigovclaw.jules@0.1.0",
-        },
-    )
-    _write(
         base / "action-required" / "review-hipaa.json",
         {
             "title": "HIPAA edge classification needs counsel",
@@ -188,7 +166,6 @@ class HubGeneratorTests(unittest.TestCase):
             "KPI posture",
             "Gap assessment",
             "EU AI Act classification",
-            "Recent Jules activity",
             "Action required",
             "Provenance",
         ):
@@ -209,8 +186,6 @@ class HubGeneratorTests(unittest.TestCase):
         # EU tiers all present.
         for tier in ("prohibited", "high risk annex i", "limited risk", "minimal risk"):
             self.assertIn(tier, html_out)
-        # Jules PR link resolves.
-        self.assertIn("https://github.com/ZOLAtheCodeX/aigovops/pull/42", html_out)
         # Action required item title.
         self.assertIn("HIPAA edge classification", html_out)
 
@@ -220,7 +195,6 @@ class HubGeneratorTests(unittest.TestCase):
             "aigovops.soa-maintenance@0.2.0",
             "aigovops.metrics-collector@0.4.0",
             "aigovops.eu-classifier@0.2.0",
-            "aigovclaw.jules@0.1.0",
             "aigovclaw.mcp-router@0.1.0",
         ):
             self.assertIn(sig, html_out, f"Missing signature: {sig}")
@@ -232,14 +206,9 @@ class HubGeneratorTests(unittest.TestCase):
         self.assertIn('<meta name="viewport"', html_out)
         self.assertIn("prefers-reduced-motion", html_out)
 
-        # No external URLs for CSS or JS.
-        # Allowed external URLs: only the github PR link inside Jules activity.
+        # No external URLs for CSS or JS. Hub is fully self-contained.
         ext = re.findall(r'(?:src|href)="(https?://[^"]+)"', html_out)
-        for u in ext:
-            self.assertTrue(
-                u.startswith("https://github.com/"),
-                f"Unexpected external URL in output: {u}",
-            )
+        self.assertEqual(ext, [], f"Unexpected external URLs: {ext}")
         # No CDN font / css / js references.
         for bad in (
             "fonts.googleapis",
