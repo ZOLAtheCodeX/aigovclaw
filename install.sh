@@ -84,7 +84,8 @@ fi
 
 # Step 2: prepare workspace layout.
 echo "[2/5] Preparing workspace at ${WORKSPACE}"
-for subdir in skills/aigovops persona memory/aigovclaw/audit-log \
+for subdir in skills/aigovops plugins/aigovops persona \
+              memory/aigovclaw/audit-log \
               memory/aigovclaw/risk-register memory/aigovclaw/soa \
               memory/aigovclaw/aisia memory/aigovclaw/nonconformity \
               memory/aigovclaw/role-matrix memory/aigovclaw/management-review \
@@ -125,9 +126,11 @@ run rsync -a --delete \
   "\"${WORKSPACE}/plugins/aigovops/\""
 echo "      Plugins deployed to ${WORKSPACE}/plugins/aigovops/"
 
-# Copy the AIGovClaw tool registration module. This is Hermes-specific
-# and lives in aigovclaw (not aigovops).
-run cp -r "\"${REPO_ROOT}/tools\"" "\"${WORKSPACE}/tools\""
+# Copy the AIGovClaw tool registration module into the workspace. This
+# is Hermes-specific and lives in aigovclaw (not aigovops). Using
+# rsync instead of cp -r so re-runs refresh cleanly.
+run mkdir -p "\"${WORKSPACE}/tools\""
+run rsync -a --delete "\"${REPO_ROOT}/tools/\"" "\"${WORKSPACE}/tools/\""
 echo "      Tool registration module deployed to ${WORKSPACE}/tools/"
 
 # Clean up the clone if we made one.
