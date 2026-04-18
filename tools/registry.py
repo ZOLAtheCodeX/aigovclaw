@@ -81,6 +81,12 @@ class Tool:
     artifact_type: str | None = None
     requires_human_approval: bool = False
     max_result_size_bytes: int = 1_000_000
+    required_fields: set[str] = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.required_fields = {
+            name for name, spec in self.input_schema.items() if spec.get("required", False)
+        }
 
 
 class ToolRegistry:
@@ -152,8 +158,9 @@ class ToolRegistry:
             return ["inputs must be a dict"]
 
         # Required fields present.
-        for field_name, spec in tool.input_schema.items():
-            if spec.get("required", False) and field_name not in inputs:
+        missing = tool.required_fields - inputs.keys()
+        if missing:
+            for field_name in sorted(missing):
                 errors.append(f"required field {field_name!r} missing")
 
         # Field types and enums.
