@@ -46,7 +46,7 @@ Python 3.10 or newer is required.
 
 ## Generate a dashboard
 
-```
+```bash
 python3 -m aigovclaw.hub.cli generate --output dashboard.html
 ```
 
@@ -54,7 +54,7 @@ Open `dashboard.html` in any modern browser.
 
 The hub reads from `~/.hermes/memory/aigovclaw/` by default. Override with:
 
-```
+```bash
 AIGOVCLAW_EVIDENCE_PATH=/path/to/evidence python3 -m aigovclaw.hub.cli generate --output dashboard.html
 # or
 python3 -m aigovclaw.hub.cli generate --output dashboard.html --evidence /path/to/evidence
@@ -66,7 +66,7 @@ Drill-down links point to JSON artifact files under the evidence store. For
 those links to resolve in a browser, serve the generated HTML and the evidence
 tree together:
 
-```
+```bash
 python3 -m aigovclaw.hub.cli serve --port 8080 --open
 ```
 
@@ -146,7 +146,7 @@ properties on `:root` and can be overridden without touching the generator.
 To override, drop a stylesheet before the inline CSS or edit the variables
 block at the top of the generated HTML. For example:
 
-```
+```text
 :root {
   --accent: #a3b18a;      /* olive */
   --bg: #111315;
@@ -179,7 +179,7 @@ hub does not regenerate that block on reload; edits persist until the next
 
 Standalone runnable:
 
-```
+```bash
 python3 hub/tests/test_generator.py
 ```
 
