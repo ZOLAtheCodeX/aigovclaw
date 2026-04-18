@@ -155,16 +155,18 @@ class MCPRouter:
             row_type = _row_to_artifact_type(artifact_type)
             row_routes = self.routes.get(row_type) or self.routes.get(artifact_type, [])
             rows = artifact.get(_rows_key(artifact_type)) or []
-            for row in rows:
-                for route in row_routes:
-                    invocations.append(self._build_invocation(
-                        source=row,
-                        route=route,
-                        artifact_type=row_type,
-                        parent_artifact_type=artifact_type,
-                        timestamp=timestamp,
-                        action_tag=_classify_action(row) if row.get("warnings") else action_tag,
-                    ))
+            if row_routes:
+                for row in rows:
+                    row_action_tag = _classify_action(row) if row.get("warnings") else action_tag
+                    for route in row_routes:
+                        invocations.append(self._build_invocation(
+                            source=row,
+                            route=route,
+                            artifact_type=row_type,
+                            parent_artifact_type=artifact_type,
+                            timestamp=timestamp,
+                            action_tag=row_action_tag,
+                        ))
             # Also allow routes targeting the whole-document (multi-row) artifact
             # type, which pushes one page representing the full register.
             doc_routes = self.routes.get(artifact_type, [])
