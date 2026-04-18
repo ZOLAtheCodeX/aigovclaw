@@ -378,6 +378,144 @@ footer.provenance .sig { color: var(--text-faint); word-break: break-all; }
   z-index: 10;
   border-radius: var(--radius);
 }
+
+/* Jurisdiction tab bar */
+.jurisdiction-bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: rgba(15, 20, 25, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+  margin: -16px -32px 32px;
+  padding: 12px 32px;
+}
+
+@media (max-width: 900px) {
+  .jurisdiction-bar { margin: -8px -18px 24px; padding: 10px 18px; }
+}
+
+.jurisdiction-tabs {
+  display: flex;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex-wrap: wrap;
+}
+
+.jurisdiction-tab {
+  font-family: var(--font-display);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-faint);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+
+.jurisdiction-tab:hover {
+  color: var(--text-dim);
+  border-color: var(--accent-dim);
+}
+
+.jurisdiction-tab[aria-selected="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+
+.jurisdiction-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Jurisdiction filtering: hide panels outside the active view.
+   Default (no class on body) shows everything, matching no-JS fallback. */
+.panel {
+  transition: opacity 120ms ease;
+}
+
+body.filter-usa .panel[data-jurisdiction="eu"],
+body.filter-usa .panel[data-jurisdiction="uk"] { display: none; }
+
+body.filter-eu .panel[data-jurisdiction^="usa"],
+body.filter-eu .panel[data-jurisdiction="uk"],
+body.filter-eu .panel[data-jurisdiction="usa-states"] { display: none; }
+
+body.filter-uk .panel[data-jurisdiction^="usa"],
+body.filter-uk .panel[data-jurisdiction="eu"],
+body.filter-uk .panel[data-jurisdiction="usa-states"] { display: none; }
+
+/* USA state panel is hidden in every view except USA and Global. */
+body.filter-eu .panel[data-jurisdiction="usa-states"],
+body.filter-uk .panel[data-jurisdiction="usa-states"] { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .panel { transition: none; }
+  .jurisdiction-tab { transition: none; }
+}
+"""
+
+
+JURISDICTION_JS = """
+(function() {
+  var KEY = 'aigovclaw.hub.jurisdiction';
+  var VALID = ['global', 'usa', 'eu', 'uk'];
+  var body = document.body;
+  var tablist = document.querySelector('[role="tablist"].jurisdiction-tabs');
+  if (!tablist) return;
+  var tabs = Array.prototype.slice.call(tablist.querySelectorAll('[role="tab"]'));
+  if (tabs.length === 0) return;
+
+  function applyFilter(name) {
+    VALID.forEach(function(v) { body.classList.remove('filter-' + v); });
+    body.classList.add('filter-' + name);
+    tabs.forEach(function(tab) {
+      var selected = tab.dataset.jurisdiction === name;
+      tab.setAttribute('aria-selected', selected ? 'true' : 'false');
+      tab.setAttribute('tabindex', selected ? '0' : '-1');
+    });
+  }
+
+  function persist(name) {
+    try { sessionStorage.setItem(KEY, name); } catch (e) { /* ignore */ }
+  }
+
+  function restore() {
+    try {
+      var stored = sessionStorage.getItem(KEY);
+      if (stored && VALID.indexOf(stored) !== -1) return stored;
+    } catch (e) { /* ignore */ }
+    return 'global';
+  }
+
+  tabs.forEach(function(tab, idx) {
+    tab.addEventListener('click', function() {
+      var name = tab.dataset.jurisdiction;
+      applyFilter(name);
+      persist(name);
+    });
+    tab.addEventListener('keydown', function(ev) {
+      if (ev.key === 'ArrowRight' || ev.key === 'ArrowLeft') {
+        ev.preventDefault();
+        var dir = ev.key === 'ArrowRight' ? 1 : -1;
+        var next = tabs[(idx + dir + tabs.length) % tabs.length];
+        next.focus();
+      } else if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        tab.click();
+      }
+    });
+  });
+
+  applyFilter(restore());
+})();
 """
 
 

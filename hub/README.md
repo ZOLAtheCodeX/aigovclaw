@@ -87,6 +87,10 @@ The hub walks the following paths under the evidence root:
 | `metrics/` | KPI collector output. |
 | `gap-assessment/` | Per-framework gap assessment scores. |
 | `classification/` | EU AI Act classifier output per system. |
+| `uk-atrs/` | UK Algorithmic Transparency Recording Standard records. |
+| `colorado-ai-act/` | Colorado SB 205 artifacts. |
+| `nyc-ll144/` | NYC Local Law 144 AEDT bias audit artifacts. |
+| `california-ai/` | California ADMT, CCPA, SB 942, AB 2013 artifacts. |
 | `jules/flagged/` | Active FlaggedIssue records for Jules. |
 | `jules/archive/` | Closed FlaggedIssue records. |
 | `action-required/` | Artifacts routed to the human-action queue by the MCP router. |
@@ -94,6 +98,50 @@ The hub walks the following paths under the evidence root:
 Each JSON file is loaded once. For "latest per system" panels, the most
 recent file per `system_id` wins, fallen back to file mtime. Files that fail
 to parse are skipped silently; they do not abort the render.
+
+## Jurisdiction filter
+
+The hub renders a sticky tab bar with four views: Global, USA, EU, UK. Global
+is the default and shows every panel. The other three scope the view to the
+panels relevant to that jurisdiction.
+
+| View | Shows | Hides |
+|---|---|---|
+| Global | All panels. | Nothing. |
+| USA | Global panels, USA state-level activity panel, and any panel tagged `usa-*`. | EU-only, UK-only. |
+| EU | Global panels and the EU AI Act classification panel. | USA state-level, UK-only. |
+| UK | Global panels and the UK ATRS records panel. | USA state-level, EU-only. |
+
+Every panel carries a `data-jurisdiction` attribute. Each artifact may also
+carry a top-level `jurisdiction` field that overrides the default mapping from
+artifact type to jurisdiction.
+
+### USA state-level panel
+
+The USA view includes a state-level activity table with rows for Colorado
+(SB 205), New York City (Local Law 144), and California (CPPA ADMT, CCPA,
+SB 942, AB 2013). Counts reflect the number of records under the matching
+evidence directory. Empty directories produce a zero-count row rather than
+hiding the jurisdiction.
+
+### How filtering works
+
+Filtering is CSS-class based. A small script adds `filter-global`,
+`filter-usa`, `filter-eu`, or `filter-uk` to `<body>`. Panels are shown and
+hidden via attribute selectors on `data-jurisdiction`. If JavaScript is
+disabled the page renders the Global view with all panels visible.
+
+### Persistence
+
+The selected tab is stored in `sessionStorage` and restored on reload. No
+cookies. No `localStorage`. The preference is scoped to the browser tab.
+
+### Accessibility
+
+The tab bar implements the ARIA authoring-practices `tablist` pattern.
+Arrow keys move focus between tabs, Enter and Space activate the focused
+tab, and `aria-selected` reflects the active view. The CSS transition on
+view changes respects `prefers-reduced-motion`.
 
 ## Empty state
 

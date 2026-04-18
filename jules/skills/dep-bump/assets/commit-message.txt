@@ -1,0 +1,7 @@
+dep-bump: <dep> <old-version> -> <new-version> (<bump-class>)
+
+Issue: <issue-id>
+Bump class: <patch|minor>
+Release notes: <url>
+
+Manifest and lockfile only. No source file edits. CI green.

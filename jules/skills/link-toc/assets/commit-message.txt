@@ -1,0 +1,6 @@
+link-toc: fix <n> broken anchor(s) and/or add <m> TOC entry/entries
+
+Issue: <issue-id>
+README: <path>
+
+Link-and-toc only. No heading edits. No added or removed sections.

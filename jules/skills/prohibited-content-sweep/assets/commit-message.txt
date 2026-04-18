@@ -1,0 +1,8 @@
+prohibited-content-sweep: remove <n> prohibited pattern(s)
+
+Issue: <issue-id>
+Files changed: <list>
+Counts per file:
+  <path>: em-dash=<n>, non-ascii=<n>, hedging=<n>
+
+Meaning preserved. No net content loss. AGENTS.md Section 1 respected.

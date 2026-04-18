@@ -35,6 +35,17 @@ export JULES_API_KEY="your-key-here"
 python3 -c "import os; assert os.environ.get('JULES_API_KEY'), 'not set'; print('ok')"
 ```
 
+## Agent Skills
+
+The 8 Jules maintenance playbooks under `jules/playbook/` are also published as Agent Skills in the open standard at `jules/skills/`. The two forms coexist:
+
+- Flat `jules/playbook/*.md` files remain the input format for the Python dispatcher (`jules/dispatcher.py`). The dispatcher continues to read these. No dispatcher changes.
+- `jules/skills/<name>/` is the cross-agent distribution form, compatible with Jules Skills, Claude Code Skills, Cursor, Gemini CLI, and Antigravity. Each skill directory contains `SKILL.md` (frontmatter + prose), `scripts/` (stale-check and post-check helpers), `resources/` (citation rules, prohibited-content lists), `assets/` (PR title, branch name, commit message templates), and a human-facing `README.md`.
+
+Install into a target agent via `bash jules/skills/install.sh --target <agent>` where `<agent>` is one of `claude-code`, `cursor`, `gemini-cli`, `antigravity`, or `jules`. See `jules/skills/README.md` for the full catalog and compatibility matrix.
+
+These skills are maintainer-scoped (same scope as the dispatcher itself). End-users of AIGovClaw do not invoke them.
+
 ## Quickstart
 
 All commands assume the repo root is the working directory.

@@ -1,0 +1,7 @@
+markdown-lint: fix <n> lint violation(s) (<rule-ids>)
+
+Issue: <issue-id>
+Files changed: <list>
+
+Lint-only, no content changes. Whitespace, heading level, list marker,
+line length, or code fence language changes only.

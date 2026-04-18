@@ -31,7 +31,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-from .templates.layout import CSS, empty_state
+from .templates.layout import CSS, JURISDICTION_JS, empty_state
 
 
 DEFAULT_EVIDENCE_PATH = Path.home() / ".hermes" / "memory" / "aigovclaw"
@@ -45,7 +45,36 @@ ARTIFACT_DIRS = {
     "gap-assessment": "gap-assessment",
     "classification": "classification",
     "action-required": "action-required",
+    "uk-atrs": "uk-atrs",
+    "colorado-ai-act": "colorado-ai-act",
+    "nyc-ll144": "nyc-ll144",
+    "california-ai": "california-ai",
 }
+
+
+# Fallback jurisdiction map for artifacts that do not carry a top-level
+# "jurisdiction" field. Artifacts with the field override this map.
+ARTIFACT_TYPE_DEFAULT_JURISDICTION = {
+    "risk-register": "global",
+    "soa": "global",
+    "aisia": "global",
+    "nonconformity": "global",
+    "metrics": "global",
+    "gap-assessment": "global",
+    "classification": "eu",
+    "action-required": "global",
+    "uk-atrs": "uk",
+    "colorado-ai-act": "usa-co",
+    "nyc-ll144": "usa-nyc",
+    "california-ai": "usa-ca",
+}
+
+
+def _artifact_jurisdiction(art: "Artifact", artifact_type: str) -> str:
+    v = art.data.get("jurisdiction")
+    if isinstance(v, str) and v:
+        return v
+    return ARTIFACT_TYPE_DEFAULT_JURISDICTION.get(artifact_type, "global")
 
 
 # --------------------------------------------------------------------------
@@ -228,7 +257,7 @@ def _panel_risk(store: Store) -> str:
         _tile(by_treatment["accept"], "Treat: accept", tone="ok"),
     ]
     return (
-        '<section class="panel"><h2><span class="num">01</span>Risk register</h2>'
+        '<section class="panel" data-jurisdiction="global"><h2><span class="num">01</span>Risk register</h2>'
         f'<div class="tiles">{"".join(tiles)}</div></section>'
     )
 
@@ -258,7 +287,7 @@ def _panel_soa(store: Store) -> str:
         tone = "ok" if s == "included-implemented" else ("accent" if s.startswith("included") else "")
         tiles.append(_tile(count, s.replace("-", " "), href=source, tone=tone))
     return (
-        '<section class="panel"><h2><span class="num">02</span>Statement of Applicability</h2>'
+        '<section class="panel" data-jurisdiction="global"><h2><span class="num">02</span>Statement of Applicability</h2>'
         f'<div class="tiles">{"".join(tiles)}</div></section>'
     )
 
@@ -284,7 +313,7 @@ def _panel_aisia(store: Store) -> str:
         _tile(len(systems), "Systems assessed", tone="accent"),
     ]
     return (
-        '<section class="panel"><h2><span class="num">03</span>AISIA coverage</h2>'
+        '<section class="panel" data-jurisdiction="global"><h2><span class="num">03</span>AISIA coverage</h2>'
         f'<div class="tiles">{"".join(tiles)}</div></section>'
     )
 
@@ -326,7 +355,7 @@ def _panel_nonconformity(store: Store) -> str:
         _tile(f"{median_age:.0f}d", "Median age (open)"),
     ]
     return (
-        '<section class="panel"><h2><span class="num">04</span>Nonconformity</h2>'
+        '<section class="panel" data-jurisdiction="global"><h2><span class="num">04</span>Nonconformity</h2>'
         f'<div class="tiles">{"".join(tiles)}</div></section>'
     )
 
@@ -349,7 +378,7 @@ def _panel_kpi(store: Store) -> str:
         _tile(total, "KPIs tracked", tone="accent"),
     ]
     return (
-        '<section class="panel"><h2><span class="num">05</span>KPI posture</h2>'
+        '<section class="panel" data-jurisdiction="global"><h2><span class="num">05</span>KPI posture</h2>'
         f'<div class="tiles">{"".join(tiles)}</div></section>'
     )
 
@@ -379,7 +408,7 @@ def _panel_gap(store: Store) -> str:
         pct = (sum(scores) / len(scores) * 100.0) if scores else 0.0
         bars.append(_coverage_bar(fw, pct))
     return (
-        '<section class="panel"><h2><span class="num">06</span>Gap assessment</h2>'
+        '<section class="panel" data-jurisdiction="global"><h2><span class="num">06</span>Gap assessment</h2>'
         + "".join(bars)
         + '</section>'
     )
@@ -414,7 +443,7 @@ def _panel_eu(store: Store) -> str:
         }.get(t, "")
         tiles.append(_tile(counts.get(t, 0), t.replace("-", " "), tone=tone))
     return (
-        '<section class="panel wide"><h2><span class="num">07</span>EU AI Act classification</h2>'
+        '<section class="panel wide" data-jurisdiction="eu"><h2><span class="num">07</span>EU AI Act classification</h2>'
         f'<div class="tiles">{"".join(tiles)}</div></section>'
     )
 
@@ -442,9 +471,112 @@ def _panel_action_required(store: Store) -> str:
             + '</tbody></table>'
         )
     return (
-        '<section class="panel wide"><h2><span class="num">09</span>Action required: human</h2>'
+        '<section class="panel wide" data-jurisdiction="global"><h2><span class="num">09</span>Action required: human</h2>'
         + body
         + '</section>'
+    )
+
+
+US_STATE_ROWS = [
+    ("colorado-ai-act", "Colorado", "SB 205"),
+    ("nyc-ll144", "New York City", "Local Law 144"),
+    ("california-ai", "California", "CPPA ADMT, CCPA, SB 942, AB 2013"),
+]
+
+
+def _panel_usa_states(store: Store) -> str:
+    rows = []
+    for key, state_name, framework in US_STATE_ROWS:
+        arts = store.artifacts.get(key, [])
+        count = len(arts)
+        if count:
+            latest = max(arts, key=lambda a: a.mtime)
+            latest_cell = f'<a href="{e(latest.rel_href)}">{e(latest.generated_at[:10])}</a>'
+            count_cell = f'<a href="{e(arts[0].rel_href)}">{count}</a>'
+        else:
+            latest_cell = '<span class="mono">-</span>'
+            count_cell = '<span class="mono">0</span>'
+        rows.append(
+            '<tr>'
+            f'<td>{e(state_name)}</td>'
+            f'<td>{e(framework)}</td>'
+            f'<td class="mono">{count_cell}</td>'
+            f'<td class="mono">{latest_cell}</td>'
+            '</tr>'
+        )
+    body = (
+        '<table><thead><tr>'
+        '<th>State</th><th>Framework</th><th>Records</th><th>Latest</th>'
+        '</tr></thead><tbody>'
+        + "".join(rows)
+        + '</tbody></table>'
+    )
+    return (
+        '<section class="panel wide" data-jurisdiction="usa-states">'
+        '<h2><span class="num">08</span>USA state-level activity</h2>'
+        + body
+        + '</section>'
+    )
+
+
+def _panel_uk_atrs(store: Store) -> str:
+    arts = store.artifacts.get("uk-atrs", [])
+    if not arts:
+        body = (
+            '<p style="color: var(--text-dim); font-family: var(--font-display); '
+            'font-size: 13px;">No UK ATRS records.</p>'
+        )
+    else:
+        rows = []
+        for a in arts[:20]:
+            d = a.data
+            title = d.get("title") or d.get("system_name") or a.path.stem
+            status = d.get("status") or d.get("stage") or "recorded"
+            rows.append(
+                f'<tr>'
+                f'<td>{e(title)}</td>'
+                f'<td><span class="badge accent">{e(status)}</span></td>'
+                f'<td><a href="{e(a.rel_href)}">open</a></td>'
+                f'</tr>'
+            )
+        body = (
+            '<table><thead><tr><th>System</th><th>Status</th><th>Source</th></tr></thead><tbody>'
+            + "".join(rows)
+            + '</tbody></table>'
+        )
+    return (
+        '<section class="panel wide" data-jurisdiction="uk">'
+        '<h2><span class="num">10</span>UK ATRS records</h2>'
+        + body
+        + '</section>'
+    )
+
+
+def _jurisdiction_bar() -> str:
+    tabs = [
+        ("global", "Global"),
+        ("usa", "USA"),
+        ("eu", "EU"),
+        ("uk", "UK"),
+    ]
+    items = []
+    for i, (key, label) in enumerate(tabs):
+        selected = "true" if key == "global" else "false"
+        tabindex = "0" if key == "global" else "-1"
+        items.append(
+            f'<li><button type="button" role="tab" '
+            f'class="jurisdiction-tab" '
+            f'data-jurisdiction="{e(key)}" '
+            f'id="jtab-{e(key)}" '
+            f'aria-selected="{selected}" '
+            f'tabindex="{tabindex}">{e(label)}</button></li>'
+        )
+    return (
+        '<nav class="jurisdiction-bar" aria-label="Jurisdiction filter">'
+        '<ul class="jurisdiction-tabs" role="tablist" '
+        'aria-label="Jurisdiction">'
+        + "".join(items)
+        + '</ul></nav>'
     )
 
 
@@ -491,6 +623,8 @@ def render(store: Store, *, generated_at: str | None = None) -> str:
     ]
     panels_wide = [
         _panel_eu(store),
+        _panel_usa_states(store),
+        _panel_uk_atrs(store),
         _panel_action_required(store),
     ]
 
@@ -517,6 +651,7 @@ def render(store: Store, *, generated_at: str | None = None) -> str:
       <div class="path">{e(str(store.base))}</div>
     </div>
   </header>
+  {_jurisdiction_bar()}
   <main id="main">
     <div class="grid">
       {"".join(panels_top)}
@@ -527,6 +662,7 @@ def render(store: Store, *, generated_at: str | None = None) -> str:
     {_footer_provenance(store)}
   </main>
 </div>
+<script>{JURISDICTION_JS}</script>
 </body>
 </html>
 """

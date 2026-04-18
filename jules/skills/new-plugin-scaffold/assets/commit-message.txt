@@ -1,0 +1,8 @@
+new-plugin-scaffold: add plugins/<name>/ skeleton (<artifact-type>)
+
+Issue: <issue-id>
+Artifact type: <type>
+
+Scaffold-only, no body content. SKILL.md has section headers + TODO
+markers only. schema.json is a valid stub. tests/ has one pending
+placeholder. Existing tests still pass.

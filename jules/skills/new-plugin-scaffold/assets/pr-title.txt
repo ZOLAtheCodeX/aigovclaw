@@ -1,0 +1,1 @@
+[jules:new-plugin-scaffold] <short-description>

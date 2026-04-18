@@ -1,0 +1,7 @@
+test-coverage-gap: add <n> test case(s) for <plugin>
+
+Issue: <issue-id>
+Plugin: plugins/<name>/
+Assertion categories added: <list>
+
+Tests only. No plugin source, schema, or SKILL.md changes. Existing tests still pass.

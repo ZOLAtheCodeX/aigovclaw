@@ -1,0 +1,6 @@
+citation-drift: rewrite <n> citation(s) to STYLE.md canonical format
+
+Issue: <issue-id>
+Files changed: <list>
+
+Citations rewritten in place. No semantic prose changes. No new sources.

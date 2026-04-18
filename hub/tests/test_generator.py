@@ -257,6 +257,136 @@ class HubGeneratorTests(unittest.TestCase):
         finally:
             del os.environ["AIGOVCLAW_EVIDENCE_PATH"]
 
+    def test_jurisdiction_switcher_renders(self) -> None:
+        _seed(self.base)
+        generate(self.out, evidence_path=self.base)
+        html_out = self._read()
+        self.assertIn('role="tablist"', html_out)
+        # Four tabs with the four jurisdiction labels. Scope to the tablist.
+        m = re.search(
+            r'<ul[^>]*role="tablist"[^>]*>(.*?)</ul>', html_out, flags=re.DOTALL
+        )
+        self.assertIsNotNone(m, "No tablist <ul> found")
+        tablist_html = m.group(1)
+        tabs = re.findall(r'role="tab"[^>]*>([^<]+)<', tablist_html)
+        self.assertEqual(len(tabs), 4, f"Expected 4 tabs, got {tabs}")
+        for label in ("Global", "USA", "EU", "UK"):
+            self.assertIn(label, tabs, f"Missing tab label: {label}")
+        # Default selected tab is Global.
+        self.assertIn(
+            'data-jurisdiction="global" id="jtab-global" aria-selected="true"',
+            html_out,
+        )
+
+    def test_panel_jurisdiction_tagging(self) -> None:
+        _seed(self.base)
+        generate(self.out, evidence_path=self.base)
+        html_out = self._read()
+        # Every <section class="panel ..."> must carry data-jurisdiction.
+        panels = re.findall(r'<section class="panel[^"]*"([^>]*)>', html_out)
+        self.assertGreater(len(panels), 0, "No panels rendered")
+        for attrs in panels:
+            self.assertIn(
+                "data-jurisdiction=",
+                attrs,
+                f"Panel missing data-jurisdiction: {attrs}",
+            )
+
+    def test_usa_state_panel_empty_state(self) -> None:
+        # Seed only non-state artifacts so the state-level panel is empty.
+        _seed(self.base)
+        generate(self.out, evidence_path=self.base)
+        html_out = self._read()
+        self.assertIn("USA state-level activity", html_out)
+        self.assertIn("Colorado", html_out)
+        self.assertIn("New York City", html_out)
+        self.assertIn("California", html_out)
+        self.assertIn("SB 205", html_out)
+        self.assertIn("Local Law 144", html_out)
+        self.assertIn("CPPA ADMT", html_out)
+        # Count the dash markers in the latest column. Three rows, all zero.
+        dashes = html_out.count('<span class="mono">-</span>')
+        self.assertGreaterEqual(dashes, 3)
+        # Zero-count markers present.
+        zeros = html_out.count('<span class="mono">0</span>')
+        self.assertGreaterEqual(zeros, 3)
+
+    def test_usa_state_panel_with_records(self) -> None:
+        _seed(self.base)
+        _write(
+            self.base / "colorado-ai-act" / "co-001.json",
+            {
+                "jurisdiction": "usa-co",
+                "system_name": "Triage model",
+                "generated_at": "2026-04-10T00:00:00Z",
+                "AGENT_SIGNATURE": "aigovops.colorado-ai-act@0.1.0",
+            },
+        )
+        _write(
+            self.base / "nyc-ll144" / "nyc-001.json",
+            {
+                "jurisdiction": "usa-nyc",
+                "system_name": "Hiring AEDT",
+                "generated_at": "2026-04-12T00:00:00Z",
+                "AGENT_SIGNATURE": "aigovops.nyc-ll144@0.1.0",
+            },
+        )
+        generate(self.out, evidence_path=self.base)
+        html_out = self._read()
+        # Extract rows of the state panel.
+        m = re.search(
+            r"USA state-level activity.*?</section>", html_out, flags=re.DOTALL
+        )
+        self.assertIsNotNone(m, "State panel not found")
+        panel = m.group(0)
+        # Colorado row shows count 1.
+        co_row = re.search(
+            r"<tr>\s*<td>Colorado</td>.*?</tr>", panel, flags=re.DOTALL
+        )
+        self.assertIsNotNone(co_row)
+        self.assertIn(">1</a>", co_row.group(0))
+        # NYC row shows count 1.
+        nyc_row = re.search(
+            r"<tr>\s*<td>New York City</td>.*?</tr>", panel, flags=re.DOTALL
+        )
+        self.assertIsNotNone(nyc_row)
+        self.assertIn(">1</a>", nyc_row.group(0))
+        # California row still zero.
+        ca_row = re.search(
+            r"<tr>\s*<td>California</td>.*?</tr>", panel, flags=re.DOTALL
+        )
+        self.assertIsNotNone(ca_row)
+        self.assertIn('<span class="mono">0</span>', ca_row.group(0))
+
+    def test_session_storage_js_present(self) -> None:
+        _seed(self.base)
+        generate(self.out, evidence_path=self.base)
+        html_out = self._read()
+        self.assertIn("sessionStorage.setItem", html_out)
+        self.assertIn("sessionStorage.getItem", html_out)
+
+    def test_reduced_motion_css(self) -> None:
+        _seed(self.base)
+        generate(self.out, evidence_path=self.base)
+        html_out = self._read()
+        # There must be a prefers-reduced-motion rule that disables the
+        # panel transition added by the jurisdiction switcher.
+        m = re.search(
+            r"@media \(prefers-reduced-motion:\s*reduce\)\s*\{([^}]*\{[^}]*\}[^}]*)*\}",
+            html_out,
+            flags=re.DOTALL,
+        )
+        # Simpler: check that the block exists and references .panel transition none.
+        self.assertIn("prefers-reduced-motion", html_out)
+        reduced_blocks = re.findall(
+            r"@media \(prefers-reduced-motion:[^{]*\{[^@]*?\}\s*\}",
+            html_out,
+            flags=re.DOTALL,
+        )
+        combined = "\n".join(reduced_blocks)
+        self.assertIn(".panel", combined)
+        self.assertIn("transition: none", combined)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

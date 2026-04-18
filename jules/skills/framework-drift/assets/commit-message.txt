@@ -1,0 +1,7 @@
+framework-drift: update <plugin>/SKILL.md paragraphs for <framework> drift
+
+Issue: <issue-id>
+Authoritative source: <url>
+Paragraphs changed: <n>
+
+Citations updated to match STYLE.md. No structural rewrites. No new sections.
