@@ -18,10 +18,18 @@ import webbrowser
 from pathlib import Path
 
 from .generator import generate, resolve_evidence_path
+from .import_demo import import_demo_outputs
 
 
 def _cmd_generate(args: argparse.Namespace) -> int:
-    out = generate(args.output, evidence_path=args.evidence)
+    evidence = args.evidence
+    if args.demo_dir:
+        demo = Path(args.demo_dir)
+        dst = Path(evidence) if evidence else Path(tempfile.mkdtemp(prefix="aigovclaw-hub-demo-"))
+        written = import_demo_outputs(demo, dst)
+        print(f"Imported {len(written)} demo artifacts into {dst}")
+        evidence = dst
+    out = generate(args.output, evidence_path=evidence)
     print(f"Wrote {out}")
     return 0
 
@@ -80,6 +88,15 @@ def build_parser() -> argparse.ArgumentParser:
     g = sub.add_parser("generate", help="Write a single-file HTML dashboard.")
     g.add_argument("--output", "-o", required=True, help="Output HTML file path.")
     g.add_argument("--evidence", default=None, help="Override evidence store path.")
+    g.add_argument(
+        "--demo-dir",
+        default=None,
+        help=(
+            "Path to aigovops/examples/demo-scenario/outputs/. When set, the flat "
+            "demo outputs are reshaped into the hub layout (into --evidence if "
+            "provided, else a tmp dir) before rendering."
+        ),
+    )
     g.set_defaults(func=_cmd_generate)
 
     s = sub.add_parser("serve", help="Serve the dashboard over stdlib http.server.")

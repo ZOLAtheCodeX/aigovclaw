@@ -194,21 +194,38 @@ def _panel_risk(store: Store) -> str:
     arts = store.artifacts.get("risk-register", [])
     rows: list[dict] = []
     for a in arts:
-        r = a.data.get("risks")
+        # Primary key is "rows" per aigovops plugin contract; "risks" kept as fallback.
+        r = a.data.get("rows") or a.data.get("risks")
         if isinstance(r, list):
             rows.extend([x for x in r if isinstance(x, dict)])
-        elif isinstance(a.data, dict) and "tier" in a.data:
-            rows.append(a.data)
-    by_tier = _count_by(rows, "tier")
-    by_status = _count_by(rows, "status")
+    # Derive tier from inherent_score when tier is not explicitly set:
+    # >= 15 = high, 8-14 = medium, 1-7 = low. Matches common 5x5 heatmap.
+    by_tier = {"high": 0, "medium": 0, "low": 0}
+    by_treatment = {"reduce": 0, "accept": 0, "transfer": 0, "avoid": 0}
+    for r in rows:
+        tier = r.get("tier")
+        if tier in by_tier:
+            by_tier[tier] += 1
+        else:
+            score = r.get("inherent_score") or r.get("residual_score")
+            if isinstance(score, (int, float)):
+                if score >= 15:
+                    by_tier["high"] += 1
+                elif score >= 8:
+                    by_tier["medium"] += 1
+                else:
+                    by_tier["low"] += 1
+        t = r.get("treatment_option") or r.get("treatment")
+        if t in by_treatment:
+            by_treatment[t] += 1
     source = arts[-1].rel_href if arts else None
     tiles = [
         _tile(len(rows), "Total rows", href=source, tone="accent"),
-        _tile(by_tier.get("high", 0), "Tier: high", tone="danger"),
-        _tile(by_tier.get("medium", 0), "Tier: medium", tone="warn"),
-        _tile(by_tier.get("low", 0), "Tier: low"),
-        _tile(by_status.get("open", 0), "Status: open", tone="warn"),
-        _tile(by_status.get("mitigated", 0), "Status: mitigated", tone="ok"),
+        _tile(by_tier["high"], "Tier: high", tone="danger"),
+        _tile(by_tier["medium"], "Tier: medium", tone="warn"),
+        _tile(by_tier["low"], "Tier: low"),
+        _tile(by_treatment["reduce"], "Treat: reduce", tone="accent"),
+        _tile(by_treatment["accept"], "Treat: accept", tone="ok"),
     ]
     return (
         '<section class="panel"><h2><span class="num">01</span>Risk register</h2>'
@@ -229,7 +246,8 @@ def _panel_soa(store: Store) -> str:
     arts = store.artifacts.get("soa", [])
     rows: list[dict] = []
     for a in arts:
-        r = a.data.get("controls")
+        # Primary key is "rows" per aigovops plugin contract; "controls" kept as fallback.
+        r = a.data.get("rows") or a.data.get("controls")
         if isinstance(r, list):
             rows.extend([x for x in r if isinstance(x, dict)])
     by_status = _count_by(rows, "status")
@@ -246,23 +264,24 @@ def _panel_soa(store: Store) -> str:
 
 
 def _panel_aisia(store: Store) -> str:
-    latest = store.latest_per("aisia")
-    complete = gaps = missing = 0
-    links: dict[str, str] = {}
-    for sid, art in latest.items():
-        state = art.data.get("state") or art.data.get("status")
-        if state == "complete":
-            complete += 1
-        elif state == "gaps":
+    # One AISIA per system. "complete" = no warnings and no scaffold_sections.
+    # "with gaps" = has warnings or scaffold_sections. "missing" = no aisia at all.
+    arts = store.artifacts.get("aisia", [])
+    complete = gaps = 0
+    systems: set[str] = set()
+    for a in arts:
+        sid = a.data.get("system_name") or a.data.get("system_id") or a.path.stem
+        systems.add(sid)
+        has_gaps = bool(a.data.get("warnings")) or bool(a.data.get("scaffold_sections"))
+        if has_gaps:
             gaps += 1
         else:
-            missing += 1
-        links[sid] = art.rel_href
+            complete += 1
+    source = arts[-1].rel_href if arts else None
     tiles = [
-        _tile(complete, "Complete", tone="ok"),
+        _tile(complete, "Complete", href=source, tone="ok"),
         _tile(gaps, "With gaps", tone="warn"),
-        _tile(missing, "Missing", tone="danger"),
-        _tile(len(latest), "Systems total", tone="accent"),
+        _tile(len(systems), "Systems assessed", tone="accent"),
     ]
     return (
         '<section class="panel"><h2><span class="num">03</span>AISIA coverage</h2>'
@@ -274,21 +293,31 @@ def _panel_nonconformity(store: Store) -> str:
     arts = store.artifacts.get("nonconformity", [])
     now = datetime.now(tz=timezone.utc)
     open_ages: list[float] = []
+    # Nonconformity plugin uses an 8-stage lifecycle. Collapse to open / in-progress / closed for the tile view.
+    IN_PROGRESS = {"investigated", "root-cause-identified", "corrective-action-planned",
+                   "corrective-action-in-progress", "effectiveness-reviewed"}
+    CLOSED = {"closed"}
     state_counts = {"open": 0, "in-progress": 0, "closed": 0}
     source = arts[-1].rel_href if arts else None
     for a in arts:
-        state = a.data.get("state") or "open"
-        if state in state_counts:
-            state_counts[state] += 1
-        else:
-            state_counts.setdefault(state, 0)
-            state_counts[state] += 1
-        if state == "open":
-            created = a.data.get("created_at") or a.data.get("generated_at")
-            if isinstance(created, str):
-                d = _age_days(created, now)
-                if d is not None:
-                    open_ages.append(d)
+        records = a.data.get("records") or []
+        if not isinstance(records, list):
+            continue
+        for rec in records:
+            if not isinstance(rec, dict):
+                continue
+            status = rec.get("status") or rec.get("state") or "detected"
+            if status in CLOSED:
+                state_counts["closed"] += 1
+            elif status in IN_PROGRESS:
+                state_counts["in-progress"] += 1
+            else:
+                state_counts["open"] += 1
+                detected = rec.get("detected_at") or rec.get("created_at")
+                if isinstance(detected, str):
+                    d = _age_days(detected, now)
+                    if d is not None:
+                        open_ages.append(d)
     median_age = statistics.median(open_ages) if open_ages else 0
     tiles = [
         _tile(state_counts["open"], "Open", href=source, tone="warn"),
@@ -308,14 +337,13 @@ def _panel_kpi(store: Store) -> str:
     total = 0
     source = arts[-1].rel_href if arts else None
     for a in arts:
-        kpis = a.data.get("kpis")
-        if isinstance(kpis, list):
-            for k in kpis:
-                if not isinstance(k, dict):
-                    continue
-                total += 1
-                if k.get("breach") is True or k.get("status") == "breach":
-                    breaches += 1
+        # Primary: kpi_records for total; threshold_breaches for breach count.
+        kpi_records = a.data.get("kpi_records") or a.data.get("kpis") or []
+        if isinstance(kpi_records, list):
+            total += sum(1 for k in kpi_records if isinstance(k, dict))
+        tb = a.data.get("threshold_breaches") or []
+        if isinstance(tb, list):
+            breaches += sum(1 for k in tb if isinstance(k, dict))
     tiles = [
         _tile(breaches, "Breaches", href=source, tone="danger" if breaches else "ok"),
         _tile(total, "KPIs tracked", tone="accent"),
@@ -328,16 +356,27 @@ def _panel_kpi(store: Store) -> str:
 
 def _panel_gap(store: Store) -> str:
     arts = store.artifacts.get("gap-assessment", [])
+    # Gap plugin uses target_framework + summary.coverage_score. Normalize fw keys.
+    fw_aliases = {
+        "iso42001": "ISO-42001", "iso-42001": "ISO-42001", "ISO-42001": "ISO-42001",
+        "nist": "NIST-AI-RMF", "nist-ai-rmf": "NIST-AI-RMF", "NIST-AI-RMF": "NIST-AI-RMF",
+        "eu-ai-act": "EU-AI-Act", "EU-AI-Act": "EU-AI-Act",
+    }
     by_fw: dict[str, list[float]] = {}
     for a in arts:
-        fw = a.data.get("framework")
-        score = a.data.get("coverage_score")
+        fw = a.data.get("target_framework") or a.data.get("framework")
+        summary = a.data.get("summary") or {}
+        score = summary.get("coverage_score") if isinstance(summary, dict) else None
+        if score is None:
+            score = a.data.get("coverage_score")
         if isinstance(fw, str) and isinstance(score, (int, float)):
-            by_fw.setdefault(fw, []).append(float(score))
+            normalized = fw_aliases.get(fw, fw)
+            by_fw.setdefault(normalized, []).append(float(score))
     bars = []
     for fw in ("ISO-42001", "NIST-AI-RMF", "EU-AI-Act"):
-        scores = by_fw.get(fw) or by_fw.get(fw.replace("-", "/")) or []
-        pct = (sum(scores) / len(scores)) if scores else 0.0
+        scores = by_fw.get(fw, [])
+        # coverage_score is 0.0-1.0 already; convert to percent.
+        pct = (sum(scores) / len(scores) * 100.0) if scores else 0.0
         bars.append(_coverage_bar(fw, pct))
     return (
         '<section class="panel"><h2><span class="num">06</span>Gap assessment</h2>'
