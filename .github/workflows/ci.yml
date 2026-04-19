@@ -41,6 +41,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install PyYAML (crosswalk-matrix-builder dependency)
+        run: pip install pyyaml
+
       - name: Run tool registry tests
         env:
           AIGOVOPS_PLUGINS_PATH: ${{ github.workspace }}/aigovops/plugins
