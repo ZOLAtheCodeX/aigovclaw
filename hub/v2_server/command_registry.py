@@ -155,6 +155,72 @@ def build_registry(
         output = args.get("output") or str(Path.home() / ".hermes" / "memory" / "aigovclaw" / "hub-v2.html")
         return [sys.executable, "-m", "hub.v2.cli", "generate", "--output", str(output)]
 
+    def _action_executor_shim(args: dict) -> list[str]:
+        """Invoke a one-shot action through the action-executor layer.
+
+        The Command Center UI posts {action_id, plugin, target, args, rationale}
+        and this shim materializes an ActionRequest, calls execute, and prints
+        the resulting ActionResult as JSON so the task runner can surface it
+        in the task-detail view.
+        """
+        payload = {
+            "action_id": args.get("action_id") or "",
+            "plugin": args.get("plugin") or "hub-v2-operator",
+            "target": args.get("target") or "",
+            "args": args.get("action_args") or {},
+            "rationale": args.get("rationale") or "Hub v2 Command Center invocation",
+            "dry_run": bool(args.get("dry_run", False)),
+        }
+        shim = (
+            "import sys, json; "
+            f"sys.path.insert(0, {str(agc)!r}); "
+            "from aigovclaw.action_executor import ActionExecutor, ActionRequest; "
+            "from aigovclaw.action_executor.safety import utc_now_iso, new_request_id; "
+            f"p = {payload!r}; "
+            "req = ActionRequest(action_id=p['action_id'], plugin=p['plugin'], "
+            "target=p['target'], args=p['args'], rationale=p['rationale'], "
+            "dry_run=p['dry_run'], requested_at=utc_now_iso(), request_id=new_request_id()); "
+            "ex = ActionExecutor(); res = ex.execute(req); "
+            "print(json.dumps({"
+            "'request_id': res.request_id, 'status': res.status, "
+            "'authority_mode_used': res.authority_mode_used, "
+            "'audit_entry_id': res.audit_entry_id, 'error': res.error, "
+            "'output': res.output}, default=str))"
+        )
+        return [sys.executable, "-c", shim]
+
+    def _action_approve(args: dict) -> list[str]:
+        request_id = args.get("request_id") or ""
+        reason = args.get("reason") or "Hub v2 operator approved"
+        shim = (
+            "import sys, json; "
+            f"sys.path.insert(0, {str(agc)!r}); "
+            "from aigovclaw.action_executor import ActionExecutor; "
+            f"rid = {request_id!r}; reason = {reason!r}; "
+            "ex = ActionExecutor(); "
+            "res = ex.approve(rid, approver='hub-v2-operator'); "
+            "print(json.dumps({"
+            "'request_id': res.request_id, 'status': res.status, "
+            "'error': res.error, 'output': res.output}, default=str))"
+        )
+        return [sys.executable, "-c", shim]
+
+    def _action_reject(args: dict) -> list[str]:
+        request_id = args.get("request_id") or ""
+        reason = args.get("reason") or "Hub v2 operator rejected"
+        shim = (
+            "import sys, json; "
+            f"sys.path.insert(0, {str(agc)!r}); "
+            "from aigovclaw.action_executor import ActionExecutor; "
+            f"rid = {request_id!r}; reason = {reason!r}; "
+            "ex = ActionExecutor(); "
+            "res = ex.reject(rid, reason=reason, approver='hub-v2-operator'); "
+            "print(json.dumps({"
+            "'request_id': res.request_id, 'status': res.status, "
+            "'error': res.error}, default=str))"
+        )
+        return [sys.executable, "-c", shim]
+
     registry: dict[str, dict[str, Any]] = {
         "run-full-pipeline": {
             "id": "run-full-pipeline",
@@ -268,6 +334,53 @@ def build_registry(
             ],
             "requires_approval": False,
             "build_argv": _regenerate_hub,
+        },
+        "action-execute": {
+            "id": "action-execute",
+            "display_name": "Execute governance action",
+            "description": (
+                "Dispatch an ActionRequest through the aigovclaw action-executor. "
+                "The executor resolves authority mode, records audit entries, "
+                "and either runs the handler or enqueues the request for approval."
+            ),
+            "category": "action",
+            "args_schema": [
+                {"name": "action_id", "type": "string", "required": True,
+                 "help": "file-update | mcp-push | notification | re-run-plugin | trigger-downstream | git-commit-and-push"},
+                {"name": "plugin", "type": "string", "required": False,
+                 "help": "originating plugin name (defaults to hub-v2-operator)"},
+                {"name": "target", "type": "string", "required": True},
+                {"name": "action_args", "type": "json", "required": False,
+                 "help": "per-action args object (serialized JSON)"},
+                {"name": "rationale", "type": "string", "required": False},
+                {"name": "dry_run", "type": "bool", "required": False, "default": False},
+            ],
+            "requires_approval": False,
+            "build_argv": _action_executor_shim,
+        },
+        "action-approve": {
+            "id": "action-approve",
+            "display_name": "Approve pending action",
+            "description": "Approve a queued ActionRequest and run it through the handler.",
+            "category": "action",
+            "args_schema": [
+                {"name": "request_id", "type": "string", "required": True},
+                {"name": "reason", "type": "string", "required": False},
+            ],
+            "requires_approval": False,
+            "build_argv": _action_approve,
+        },
+        "action-reject": {
+            "id": "action-reject",
+            "display_name": "Reject pending action",
+            "description": "Reject a queued ActionRequest with a recorded reason.",
+            "category": "action",
+            "args_schema": [
+                {"name": "request_id", "type": "string", "required": True},
+                {"name": "reason", "type": "string", "required": True},
+            ],
+            "requires_approval": False,
+            "build_argv": _action_reject,
         },
     }
     return registry

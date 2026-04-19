@@ -48,6 +48,7 @@ from . import task_runner
 from .approval_queue import ApprovalQueue
 from .command_registry import build_registry, public_registry, resolve_aigovops_root
 from .health import compute_health
+from .pdca_routes import PDCARouteState
 
 
 class CommandCenterState:
@@ -67,6 +68,7 @@ class CommandCenterState:
         self.runner = task_runner.TaskRunner(tasks_dir=tasks_dir)
         self.approvals = ApprovalQueue(self.runner, approvals_dir=approvals_dir)
         self.registry = build_registry(aigovops_root=aigovops_root)
+        self.pdca = PDCARouteState()
         self.html_cache_dir = Path(html_cache_dir) if html_cache_dir else Path(tempfile.mkdtemp(prefix="aigovclaw-hub-v2-cc-"))
         self.html_cache_dir.mkdir(parents=True, exist_ok=True)
         self._html_lock = threading.Lock()
@@ -165,6 +167,14 @@ def build_handler(state: CommandCenterState):
 
         def do_GET(self):  # noqa: N802 (http.server convention)
             path, query = self._parsed_path()
+
+            if path.startswith("/api/pdca"):
+                result = state.pdca.handle("GET", path, {})
+                if result is not None:
+                    status_code, payload = result
+                    _write_json(self, status_code, payload)
+                    return
+
             if path == "/" or path == "/index.html":
                 try:
                     html = state.regenerate_html()
@@ -223,6 +233,14 @@ def build_handler(state: CommandCenterState):
 
         def do_POST(self):  # noqa: N802
             path, _ = self._parsed_path()
+
+            if path.startswith("/api/pdca"):
+                body = self._read_body()
+                result = state.pdca.handle("POST", path, body)
+                if result is not None:
+                    status_code, payload = result
+                    _write_json(self, status_code, payload)
+                    return
 
             if path == "/api/tasks":
                 body = self._read_body()

@@ -1,0 +1,39 @@
+# Authority policy for the AIGovClaw action-executor.
+#
+# Resolution order when executing an ActionRequest:
+#   1. Start with defaults.mode.
+#   2. Apply the first overrides entry that matches (plugin, action).
+#   3. If the action's safety properties include destructive=True and
+#      defaults.require_approval_for_destructive is true, force ask-permission.
+#   4. If the action's safety properties include external_side_effect=True and
+#      defaults.require_approval_for_external is true, force ask-permission.
+#   5. If resolved mode is autonomous, verify the plugin is listed in
+#      autonomous_opt_ins; otherwise downgrade to ask-permission.
+#
+# Rate limits are enforced per (plugin, action) pair, counted from recent
+# audit-log entries within a rolling one-hour window.
+
+defaults:
+  mode: ask-permission
+  require_approval_for_destructive: true
+  require_approval_for_external: true
+  max_rate_per_hour:
+    file-update: 60
+    mcp-push: 20
+    notification: 120
+    re-run-plugin: 60
+    trigger-downstream: 60
+    git-commit-and-push: 10
+
+overrides:
+  - plugin: audit-log-generator
+    action: notification
+    mode: take-resolving-action
+  - plugin: agent-loop-orchestrator
+    action: re-run-plugin
+    mode: take-resolving-action
+  - plugin: agent-loop-orchestrator
+    action: trigger-downstream
+    mode: take-resolving-action
+
+autonomous_opt_ins: []
