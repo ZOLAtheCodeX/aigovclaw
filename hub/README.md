@@ -1,4 +1,9 @@
-# AIGovClaw Hub v0
+# AIGovClaw Command Centre v0
+
+> Product name: AIGovClaw Command Centre. The codebase directory is `hub/` for
+> historical reasons; this is not being renamed because module paths are
+> backward-compat-sensitive. CLI subcommands (for example `serve`) and Python
+> module paths (`hub.cli`, `hub.v2.cli`) likewise retain the `hub` name.
 
 A single-file HTML dashboard that reads the local Hermes evidence store and
 renders the composite AI Management System (AIMS) state for an organization.
@@ -8,22 +13,23 @@ network requests at runtime.
 
 ## What this is
 
-The hub is the brand surface for AIGovClaw. Governance leads open it daily to
-see the composite state of their AIMS: risk register posture, Statement of
-Applicability coverage, AISIA status per AI system, open nonconformities, KPI
-breaches, framework gap-assessment scores, EU AI Act classification tiers,
-recent Jules maintenance activity, and the queue of items tagged for human
-review.
+The Command Centre is the brand surface for AIGovClaw. Governance leads open it
+daily to see the composite state of their AIMS: risk register posture,
+Statement of Applicability coverage, AISIA status per AI system, open
+nonconformities, KPI breaches, framework gap-assessment scores, EU AI Act
+classification tiers, recent Jules maintenance activity, and the queue of items
+tagged for human review.
 
-Every number in the hub is a link to the JSON artifact that produced it. This
-is the audit trail. Click a count, land on the artifact, read the evidence.
+Every number in the Command Centre is a link to the JSON artifact that produced
+it. This is the audit trail. Click a count, land on the artifact, read the
+evidence.
 
 ## What this is not
 
 1. Not a web application. There is no login, no session, no server-side state.
 2. Not a data warehouse. It reads one local directory tree and stops.
 3. Not a replacement for the primary evidence store. The store is canonical.
-   The hub is a view.
+   The Command Centre is a view.
 4. Not a substitute for the ISO audit portal, the NIST evaluation harness, or
    the EU AI Act conformity assessment process. It summarizes the evidence
    those processes produce. It does not replace them.
@@ -35,9 +41,9 @@ settings. A single self-contained HTML file can be emailed, printed to PDF,
 copied to a read-only USB, and archived alongside the evidence bundle that
 produced it. A React single-page app with backend and build toolchain cannot.
 
-When the richer interactive view is justified, hub v1 will use React, Tailwind,
-and shadcn/ui bundled via the `web-artifacts-builder` skill. That is a
-deliberate upgrade, not a default.
+When the richer interactive view is justified, Command Centre v1 will use
+React, Tailwind, and shadcn/ui bundled via the `web-artifacts-builder` skill.
+That is a deliberate upgrade, not a default.
 
 ## Versions
 
@@ -75,8 +81,8 @@ exits with code 2 and a maintainer-action message.
 
 ## Install
 
-No install step beyond the parent repository clone. The hub is pure stdlib.
-Python 3.10 or newer is required.
+No install step beyond the parent repository clone. The Command Centre is pure
+stdlib. Python 3.10 or newer is required.
 
 ## Generate a dashboard
 
@@ -86,7 +92,8 @@ python3 -m aigovclaw.hub.cli generate --output dashboard.html
 
 Open `dashboard.html` in any modern browser.
 
-The hub reads from `~/.hermes/memory/aigovclaw/` by default. Override with:
+The Command Centre reads from `~/.hermes/memory/aigovclaw/` by default. Override
+with:
 
 ```bash
 AIGOVCLAW_EVIDENCE_PATH=/path/to/evidence python3 -m aigovclaw.hub.cli generate --output dashboard.html
@@ -110,7 +117,7 @@ the network.
 
 ## Recognized artifact directories
 
-The hub walks the following paths under the evidence root:
+The Command Centre walks the following paths under the evidence root:
 
 | Directory | Purpose |
 |---|---|
@@ -135,7 +142,8 @@ to parse are skipped silently; they do not abort the render.
 
 ## Jurisdiction filter
 
-The hub renders a sticky tab bar with four views: Global, USA, EU, UK. Global
+The Command Centre renders a sticky tab bar with four views: Global, USA, EU,
+UK. Global
 is the default and shows every panel. The other three scope the view to the
 panels relevant to that jurisdiction.
 
@@ -179,13 +187,13 @@ view changes respects `prefers-reduced-motion`.
 
 ## Empty state
 
-If the evidence store is missing or empty, the hub renders a help page that
-names the missing path and lists the commands that produce first artifacts.
-No placeholders, no fake numbers.
+If the evidence store is missing or empty, the Command Centre renders a help
+page that names the missing path and lists the commands that produce first
+artifacts. No placeholders, no fake numbers.
 
 ## Design
 
-The hub follows the principles in Anthropic's frontend-design skill
+The Command Centre follows the principles in Anthropic's frontend-design skill
 (https://claude.com/blog/improving-frontend-design-through-skills): distinctive
 typography rather than generic system stacks, purposeful color with a single
 strong accent rather than purple gradients, layered atmospheric backgrounds
@@ -201,7 +209,8 @@ Two families, both opinionated, neither generic.
 - Body and tables: Crimson Pro. Fallback chain: `Georgia`,
   `Iowan Old Style`, `serif`.
 
-The hub does not ship TTF files and does not fetch fonts from the network.
+The Command Centre does not ship TTF files and does not fetch fonts from the
+network.
 The user can drop `.ttf` files into `hub/assets/fonts/` and add an
 `@font-face` block to a local override CSS if they want first-party font
 delivery. Until then the stack falls back to the listed system families.
@@ -254,8 +263,8 @@ Neither uses a third-party template engine, so edits are direct.
 
 To change the color palette without editing source: generate the file, open it,
 and modify the `:root` block at the top of the inlined `<style>` element. The
-hub does not regenerate that block on reload; edits persist until the next
-`generate` call overwrites the file.
+Command Centre does not regenerate that block on reload; edits persist until
+the next `generate` call overwrites the file.
 
 ## Tests
 
@@ -266,7 +275,7 @@ python3 hub/tests/test_generator.py
 ```
 
 The tests seed a temporary evidence store with one artifact of every supported
-type, run the generator, and assert:
+type, run the generator against it, and assert:
 
 1. Every panel is present by heading.
 2. The counts match the seed data exactly.
@@ -282,24 +291,25 @@ type, run the generator, and assert:
 
 ## Threat model
 
-The hub reads the evidence store. It never writes to it. It does not execute
-code from any artifact. It does not resolve remote URLs at render time. The
-only network request that can originate from a generated hub is a click by the
-human on a Jules PR link, which points to `github.com` only.
+The Command Centre reads the evidence store. It never writes to it. It does not
+execute code from any artifact. It does not resolve remote URLs at render time.
+The only network request that can originate from a generated Command Centre is
+a click by the human on a Jules PR link, which points to `github.com` only.
 
 The `serve` subcommand binds to `127.0.0.1` by default. Use `--host 0.0.0.0`
 only on a trusted network and document the decision.
 
 ## Integration boundary
 
-The hub is a read-only consumer of the evidence store. It has no dependency on
-`tools/`, `mcp_server/`, or `jules/`. Those modules produce artifacts. The hub
-reads them. The one-way dependency is the whole point.
+The Command Centre is a read-only consumer of the evidence store. It has no
+dependency on `tools/`, `mcp_server/`, or `jules/`. Those modules produce
+artifacts. The Command Centre reads them. The one-way dependency is the whole
+point.
 
 ## v1: React artifact variant
 
-Hub v1 is an optional richer interactive view that coexists with v0. v0
-remains the default portable single-file output and does not change.
+Command Centre v1 is an optional richer interactive view that coexists with v0.
+v0 remains the default portable single-file output and does not change.
 
 | Variant | Default | JavaScript | Use when |
 |---|---|---|---|

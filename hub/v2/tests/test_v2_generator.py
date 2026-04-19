@@ -122,7 +122,7 @@ class V2GeneratorTests(unittest.TestCase):
         self.assertIn('<div id="root"></div>', out)
         self.assertIn('<meta name="viewport"', out)
         self.assertIn("aigovclaw-hub/v2", out)
-        self.assertIn("AIGovClaw Hub v2", out)
+        self.assertIn("AIGovClaw Command Centre v2", out)
         parser = _StrictParser()
         parser.feed(out)
         self.assertEqual(parser.errors, [])
@@ -451,7 +451,7 @@ class V2GeneratorTests(unittest.TestCase):
         _seed_evidence(self.base)
         v2gen.generate(self.out, evidence_path=self.base)
         out = self._read()
-        self.assertIn("COMMAND CENTER", out)
+        self.assertIn("COMMAND CENTRE", out)
         self.assertIn("CommandCenterPanel", out)
         self.assertIn("'command-center'", out)
 

@@ -78,9 +78,9 @@ PANEL_CATALOGUE = {
     "groups": [
         {
             "id": "command-center",
-            "label": "COMMAND CENTER",
+            "label": "COMMAND CENTRE",
             "items": [
-                {"id": "command-center", "label": "Command center"},
+                {"id": "command-center", "label": "Command Centre"},
             ],
         },
         {
@@ -149,9 +149,9 @@ PANEL_CATALOGUE = {
     # Per-panel metadata. Keep descriptions concise and certification-grade.
     "panels": {
         "command-center": {
-            "title": "Command center",
-            "group": "COMMAND CENTER",
-            "description": "Live task queue, health strip, approvals, and quick actions. Requires the Hub v2 command-center server.",
+            "title": "Command Centre",
+            "group": "COMMAND CENTRE",
+            "description": "Live task queue, health strip, approvals, and quick actions. Requires the Command Centre v2 server.",
             "plugin": "hub.v2_server",
         },
         "dashboard": {

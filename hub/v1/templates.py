@@ -1022,7 +1022,7 @@ APP_JS = r"""
     if (isEmpty) {
       return e('div', { className: 'max-w-screen mx-auto p-8' },
         e('header', { className: 'mb-8 pb-4 border-b' },
-          e('span', { className: 'font-display text-xs uppercase tracking-wider text-accent' }, 'AIGovClaw hub v1'),
+          e('span', { className: 'font-display text-xs uppercase tracking-wider text-accent' }, 'AIGovClaw Command Centre v1'),
           e('h1', { className: 'font-display font-medium text-3xl leading-tight mt-1' }, 'No evidence yet.')
         ),
         e(Alert, { tone: 'warn' },
@@ -1032,7 +1032,7 @@ APP_JS = r"""
         e('pre', { className: 'bg-surface border rounded p-4 font-display text-sm overflow-x-auto' },
           'hermes run aigovops.risk-register --input <path>\nhermes run aigovops.soa-maintenance\nhermes run aigovops.eu-ai-act-classifier'
         ),
-        e('p', { className: 'text-dim mt-4' }, 'Then regenerate this hub:'),
+        e('p', { className: 'text-dim mt-4' }, 'Then regenerate this Command Centre:'),
         e('pre', { className: 'bg-surface border rounded p-4 font-display text-sm overflow-x-auto' },
           'python3 -m aigovclaw.hub.v1.cli generate --output hub-v1.html'
         ),
@@ -1044,7 +1044,7 @@ APP_JS = r"""
       e('a', { className: 'skip-link', href: '#main' }, 'Skip to content'),
       e('header', { className: 'flex justify-between items-end flex-wrap gap-4 mb-6 pb-4 border-b' },
         e('div', { className: 'flex flex-col gap-1' },
-          e('span', { className: 'font-display text-xs uppercase tracking-wider text-accent' }, 'AIGovClaw hub v1'),
+          e('span', { className: 'font-display text-xs uppercase tracking-wider text-accent' }, 'AIGovClaw Command Centre v1'),
           e('h1', { className: 'font-display font-medium text-3xl leading-tight' },
             'Composite ', e('span', { className: 'text-accent' }, '|'), ' AIMS state')
         ),
@@ -1107,7 +1107,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="generator" content="aigovclaw-hub/v1">
 <meta name="color-scheme" content="dark">
-<title>AIGovClaw Hub v1. Composite AIMS state.</title>
+<title>AIGovClaw Command Centre v1. Composite AIMS state.</title>
 <style>{tailwind_css}</style>
 </head>
 <body>
@@ -1140,7 +1140,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
 
 VENDOR_MISSING_MESSAGE = (
-    "FATAL: AIGovClaw Hub v1 requires vendored React bundles.\n"
+    "FATAL: AIGovClaw Command Centre v1 requires vendored React bundles.\n"
     "Drop the following files into hub/v1/vendor/ and retry:\n"
     "  - hub/v1/vendor/react.production.min.js\n"
     "  - hub/v1/vendor/react-dom.production.min.js\n"

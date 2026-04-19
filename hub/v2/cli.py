@@ -89,7 +89,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="aigovclaw.hub.v2",
-        description="Generate and serve the AIGovClaw hub v2 (practitioner dashboard).",
+        description="Generate and serve the AIGovClaw Command Centre v2 (practitioner dashboard).",
     )
     sub = p.add_subparsers(dest="cmd", required=True)
 

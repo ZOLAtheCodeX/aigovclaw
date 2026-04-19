@@ -635,7 +635,7 @@ def render(store: Store, *, generated_at: str | None = None) -> str:
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="generator" content="aigovclaw-hub/v0">
 <meta name="color-scheme" content="dark">
-<title>AIGovClaw Hub. Composite AIMS state.</title>
+<title>AIGovClaw Command Centre. Composite AIMS state.</title>
 <style>{CSS}</style>
 </head>
 <body>
@@ -643,7 +643,7 @@ def render(store: Store, *, generated_at: str | None = None) -> str:
 <div class="wrap">
   <header class="masthead">
     <div class="brand">
-      <span class="eyebrow">AIGovClaw hub v0</span>
+      <span class="eyebrow">AIGovClaw Command Centre v0</span>
       <h1>Composite <span class="pipe">|</span> AIMS state</h1>
     </div>
     <div class="meta">

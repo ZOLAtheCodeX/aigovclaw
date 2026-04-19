@@ -526,14 +526,14 @@ def empty_state(evidence_path: str, generated_at: str) -> str:
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="generator" content="aigovclaw-hub/v0">
-<title>AIGovClaw Hub. No evidence yet.</title>
+<title>AIGovClaw Command Centre. No evidence yet.</title>
 <style>{CSS}</style>
 </head>
 <body>
 <div class="wrap">
   <div class="empty">
     <div class="brand" style="align-items: center;">
-      <span class="eyebrow">AIGovClaw Hub v0</span>
+      <span class="eyebrow">AIGovClaw Command Centre v0</span>
     </div>
     <h1>No evidence yet.</h1>
     <p>The evidence store at this path is empty or missing:</p>

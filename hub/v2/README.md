@@ -1,4 +1,4 @@
-# AIGovClaw Hub v2
+# AIGovClaw Command Centre v2
 
 The practitioner-facing dashboard. A single-file HTML artifact that reads the
 local Hermes evidence store and renders 30+ panels covering every AIGovOps
@@ -90,8 +90,9 @@ exits with code 2 and prints actionable instructions. See
 
 ## Serve
 
-Starts the command-center HTTP server. Serves the Hub v2 HTML at `/` and the
-live JSON API under `/api/*` (health, tasks, approvals, commands, artifacts).
+Starts the Command Centre HTTP server. Serves the Command Centre v2 HTML at
+`/` and the live JSON API under `/api/*` (health, tasks, approvals, commands,
+artifacts).
 
 ```bash
 python3 -m hub.v2.cli serve --port 8080 --open
@@ -106,10 +107,10 @@ python3 -m hub.cli hub-v2-serve --port 8080 --open
 
 Binds `127.0.0.1` by default; not reachable from the network. No auth.
 
-## Command center
+## Command Centre
 
 Once the server is running, open `http://127.0.0.1:8080/` and the Command
-Center panel appears at the top of the sidebar. It shows:
+Centre panel appears at the top of the sidebar. It shows:
 
 - **Health strip** plugin count, warning count, bundle-signed status, last
   run timestamp. Polled every 10 seconds.

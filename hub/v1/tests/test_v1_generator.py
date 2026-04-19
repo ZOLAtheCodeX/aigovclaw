@@ -154,7 +154,7 @@ class V1GeneratorTests(unittest.TestCase):
         self.assertIn('<meta name="viewport"', out)
         self.assertIn('aigovclaw-hub/v1', out)
         # Title references v1.
-        self.assertIn("AIGovClaw Hub v1", out)
+        self.assertIn("AIGovClaw Command Centre v1", out)
         # Aesthetic bar present.
         self.assertIn("#d97757", out)
         self.assertIn("#0f1419", out)

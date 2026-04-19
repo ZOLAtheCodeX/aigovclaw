@@ -76,7 +76,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
 
     with socketserver.TCPServer((host, port), Handler) as httpd:
         url = f"http://{host}:{port}/index.html"
-        print(f"Serving AIGovClaw hub at {url}")
+        print(f"Serving AIGovClaw Command Centre at {url}")
         print(f"Evidence: {evidence}")
         print("Ctrl-C to stop.")
         if args.open:
@@ -94,7 +94,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="aigovclaw.hub",
-        description="Generate and serve the AIGovClaw composite AIMS hub.",
+        description="Generate and serve the AIGovClaw composite AIMS Command Centre.",
     )
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -165,7 +165,7 @@ def build_parser() -> argparse.ArgumentParser:
     # default. See hub/v2_server/server.py for the endpoint list.
     sv2 = sub.add_parser(
         "hub-v2-serve",
-        help="Start the Hub v2 command-center server (HTML + JSON API).",
+        help="Start the Command Centre v2 server (HTML + JSON API).",
     )
     sv2.add_argument("--port", type=int, default=8080)
     sv2.add_argument("--host", default="127.0.0.1")

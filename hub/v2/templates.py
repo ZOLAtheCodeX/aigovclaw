@@ -1056,7 +1056,7 @@ APP_JS = r"""
     return e('aside', { className: 'sidebar', 'aria-label': 'Primary navigation' },
       e('div', { className: 'mb-4 px-2' },
         e('div', { className: 'font-display text-xs tracking-wider uppercase text-accent mb-1' }, 'AIGovClaw'),
-        e('div', { className: 'font-display font-semibold text-md text-text' }, 'Hub v2')
+        e('div', { className: 'font-display font-semibold text-md text-text' }, 'Command Centre v2')
       ),
       // Ungrouped items.
       e('div', { className: 'mb-2' },
@@ -1480,7 +1480,7 @@ APP_JS = r"""
     }
     if (s.serverOnline === false) {
       return e('div', { className: 'health-strip', role: 'status', 'data-health-strip': '1' },
-        e(Chip, { tone: 'warn', title: 'Command-center server is not reachable. Live data disabled.' }, 'Server offline')
+        e(Chip, { tone: 'warn', title: 'Command Centre server is not reachable. Live data disabled.' }, 'Server offline')
       );
     }
     var warnTone = (h.warning_count || 0) > 0 ? 'warn' : 'ok';
@@ -1604,7 +1604,7 @@ APP_JS = r"""
       return e('p', { className: 'text-dim text-sm', 'data-approval-queue': 'empty' }, 'No approvals pending.');
     }
     function decide(id, action) {
-      apiFetch('/api/approvals/' + id + '/' + action, { method: 'POST', body: action === 'reject' ? { reason: 'rejected via command center' } : {} })
+      apiFetch('/api/approvals/' + id + '/' + action, { method: 'POST', body: action === 'reject' ? { reason: 'rejected via Command Centre' } : {} })
         .catch(function(err) { alert(action + ' failed: ' + err.message); });
     }
     return e('div', { className: 'approval-queue', 'data-approval-queue': '1' },
@@ -1655,8 +1655,8 @@ APP_JS = r"""
     var server = props.server;
     return e('div', { 'data-command-center': '1' },
       e(PanelHeader, {
-        crumbs: ['Home', 'COMMAND CENTER', meta.title || 'Command center'],
-        title: meta.title || 'Command center',
+        crumbs: ['Home', 'COMMAND CENTRE', meta.title || 'Command Centre'],
+        title: meta.title || 'Command Centre',
         desc: meta.description || '',
       }),
       e(HealthStrip, { server: server }),
@@ -3027,7 +3027,7 @@ APP_JS = r"""
           saved ? e('span', { className: 'text-dim font-mono text-xs' }, 'Saved ' + saved.slice(0, 19)) : null
         ),
         e('p', { className: 'text-faint text-xs mt-3' },
-          'Saved to localStorage key ', e('code', null, PROFILE_KEY), '. Hub v2 is read-only otherwise; this profile is the single write.')
+          'Saved to localStorage key ', e('code', null, PROFILE_KEY), '. The Command Centre v2 is read-only otherwise; this profile is the single write.')
         ,
         e('p', { className: 'text-faint text-xs mt-1' },
           'Persisted to disk via aigovclaw.hub.v2.cli dump-profile ~/.hermes/memory/aigovclaw/hub-v2-profile.json')
@@ -3155,7 +3155,7 @@ APP_JS = r"""
   function WelcomePage(props) {
     return e('div', { className: 'p-6 max-w-screen mx-auto' },
       e('div', { className: 'mb-4' },
-        e('span', { className: 'font-display text-xs uppercase tracking-wider text-accent' }, 'AIGovClaw Hub v2'),
+        e('span', { className: 'font-display text-xs uppercase tracking-wider text-accent' }, 'AIGovClaw Command Centre v2'),
         e('h1', { className: 'font-display font-semibold text-3xl mt-1' }, 'No evidence yet.')
       ),
       e(Alert, { tone: 'info' },
@@ -3247,7 +3247,7 @@ APP_JS = r"""
         e(ActionBanner, { data: DATA.action_required }),
         e('header', { className: 'topbar' },
           e('div', { className: 'flex flex-col' },
-            e('span', { className: 'font-display text-xs uppercase tracking-wider text-accent' }, 'AIGovClaw Hub v2'),
+            e('span', { className: 'font-display text-xs uppercase tracking-wider text-accent' }, 'AIGovClaw Command Centre v2'),
             e('span', { className: 'font-mono text-xs text-faint' }, DATA.generated_at || '')
           ),
           e('div', { className: 'flex-1' }),
@@ -3288,7 +3288,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="generator" content="aigovclaw-hub/v2">
 <meta name="color-scheme" content="dark">
-<title>AIGovClaw Hub v2. Practitioner dashboard.</title>
+<title>AIGovClaw Command Centre v2. Practitioner dashboard.</title>
 <style>{tailwind_css}</style>
 </head>
 <body>
@@ -3320,7 +3320,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
 
 VENDOR_MISSING_MESSAGE = (
-    "FATAL: AIGovClaw Hub v2 requires vendored React bundles.\n"
+    "FATAL: AIGovClaw Command Centre v2 requires vendored React bundles.\n"
     "Drop the following files into hub/v2/vendor/ and retry:\n"
     "  - hub/v2/vendor/react.production.min.js\n"
     "  - hub/v2/vendor/react-dom.production.min.js\n"

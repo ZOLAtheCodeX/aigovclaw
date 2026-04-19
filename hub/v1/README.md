@@ -1,4 +1,4 @@
-# AIGovClaw Hub v1
+# AIGovClaw Command Centre v1
 
 An optional richer interactive view of the same evidence store that v0 reads.
 v1 does not replace v0. v0 remains the portable single-file default.

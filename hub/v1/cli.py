@@ -76,7 +76,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
 
     with socketserver.TCPServer((host, port), Handler) as httpd:
         url = f"http://{host}:{port}/index.html"
-        print(f"Serving AIGovClaw hub v1 at {url}")
+        print(f"Serving AIGovClaw Command Centre v1 at {url}")
         print(f"Evidence: {evidence}")
         print("Ctrl-C to stop.")
         if args.open:
@@ -94,7 +94,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="aigovclaw.hub.v1",
-        description="Generate and serve the AIGovClaw hub v1 (React artifact).",
+        description="Generate and serve the AIGovClaw Command Centre v1 (React artifact).",
     )
     sub = p.add_subparsers(dest="cmd", required=True)
 
