@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -25,34 +24,30 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEMO_DIR = REPO_ROOT / "demos" / "audit-log"
-AIGOVOPS_CANDIDATES = (
-    REPO_ROOT.parent / "aigovops",
-    Path.home() / "Documents" / "CODING" / "aigovops",
-)
 
 
 def _aigovops_available() -> bool:
-    for root in AIGOVOPS_CANDIDATES:
-        if (root / "plugins" / "audit-log-generator" / "plugin.py").exists():
-            return True
-    return False
+    """Mirror the candidate list used by run.py to stay consistent."""
+    candidates: list[Path] = []
+    env_path = os.environ.get("AIGOVOPS_PLUGINS_PATH")
+    if env_path:
+        candidates.append(Path(env_path) / "audit-log-generator" / "plugin.py")
+    candidates.append(REPO_ROOT.parent / "aigovops" / "plugins" / "audit-log-generator" / "plugin.py")
+    candidates.append(
+        Path.home() / "Documents" / "CODING" / "aigovops" / "plugins"
+        / "audit-log-generator" / "plugin.py"
+    )
+    return any(c.exists() for c in candidates)
 
 
 pytestmark = pytest.mark.skipif(
     not _aigovops_available(),
-    reason="Sibling aigovops repo with audit-log-generator plugin not present.",
+    reason="aigovops plugins path not present. Set AIGOVOPS_PLUGINS_PATH or place a sibling checkout.",
 )
 
 
-def test_demo_runs_and_produces_expected_artifacts(tmp_path):
-    scratch_demo = tmp_path / "audit-log"
-    shutil.copytree(DEMO_DIR, scratch_demo)
-    # Wipe any pre-existing output inside the scratch copy.
-    out_dir = scratch_demo / "output"
-    if out_dir.exists():
-        shutil.rmtree(out_dir)
-
-    runner = scratch_demo / "run.py"
+def test_demo_runs_and_produces_expected_artifacts():
+    runner = DEMO_DIR / "run.py"
     env = dict(os.environ)
     env["PYTHONPATH"] = f"{REPO_ROOT}{os.pathsep}" + env.get("PYTHONPATH", "")
 

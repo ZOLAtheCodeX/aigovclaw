@@ -34,22 +34,37 @@ DEMO_DIR = Path(__file__).resolve().parent
 REPO_ROOT = DEMO_DIR.parent.parent
 OUTPUT_DIR = DEMO_DIR / "output"
 
-AIGOVOPS_CANDIDATES = (
-    REPO_ROOT.parent / "aigovops",
-    Path.home() / "Documents" / "CODING" / "aigovops",
-)
+PLUGIN_RELATIVE = Path("audit-log-generator") / "plugin.py"
 
-PLUGIN_RELATIVE = Path("plugins") / "audit-log-generator" / "plugin.py"
+
+def _aigovops_plugin_candidates() -> list[Path]:
+    """Return the ordered list of paths where the plugin may live.
+
+    Precedence:
+      1. AIGOVOPS_PLUGINS_PATH env var (matches the convention used by
+         tools/tests/test_registry.py and the CI workflow).
+      2. Sibling checkout relative to the repo root.
+      3. User's canonical CODING dir layout.
+    """
+    candidates: list[Path] = []
+    env_path = os.environ.get("AIGOVOPS_PLUGINS_PATH")
+    if env_path:
+        candidates.append(Path(env_path) / PLUGIN_RELATIVE)
+    candidates.append(REPO_ROOT.parent / "aigovops" / "plugins" / PLUGIN_RELATIVE)
+    candidates.append(
+        Path.home() / "Documents" / "CODING" / "aigovops" / "plugins" / PLUGIN_RELATIVE
+    )
+    return candidates
 
 
 def _locate_plugin() -> Path:
-    for root in AIGOVOPS_CANDIDATES:
-        candidate = root / PLUGIN_RELATIVE
+    candidates = _aigovops_plugin_candidates()
+    for candidate in candidates:
         if candidate.exists():
             return candidate
     raise SystemExit(
-        f"Could not locate audit-log-generator plugin. Searched: "
-        f"{[str(r / PLUGIN_RELATIVE) for r in AIGOVOPS_CANDIDATES]}"
+        "Could not locate audit-log-generator plugin. Searched: "
+        f"{[str(c) for c in candidates]}"
     )
 
 
