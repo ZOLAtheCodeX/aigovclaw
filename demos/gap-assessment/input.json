@@ -1,0 +1,56 @@
+{
+  "target_framework": "iso42001",
+  "scope_boundary": "Clinical decision-support and claims-operations AI systems deployed at Contoso Health Insurance. Excludes corporate IT and HR-facing AI systems.",
+  "reviewed_by": "AI Governance Lead, Contoso Health Insurance",
+  "ai_system_inventory": [
+    {
+      "system_name": "ClaimsTriageAI-v1",
+      "purpose": "Triage inbound health insurance claims to prioritize high-urgency clinical cases for human adjuster review. Does not approve, deny, or adjust claim amounts.",
+      "risk_tier": "high",
+      "deployment_context": "Production clinical-operations environment."
+    },
+    {
+      "system_name": "ProviderNetworkSearchAI-v2",
+      "purpose": "Rank in-network provider search results for members by likely relevance. Non-determinative of coverage.",
+      "risk_tier": "limited",
+      "deployment_context": "Consumer-facing member portal."
+    }
+  ],
+  "current_state_evidence": {
+    "A.2.2": [
+      "policies/ai-policy-2026-Q1.md",
+      "board-meeting-minutes-2026-01-17.pdf"
+    ],
+    "A.3.2": [
+      "rasci/ai-governance-rasci-2026-Q1.xlsx",
+      "jd/ai-governance-lead.pdf"
+    ],
+    "A.6.2.3": [
+      "design/ClaimsTriageAI-v1-design-doc-v1.2.pdf",
+      "design/ProviderNetworkSearchAI-v2-design-doc-v2.0.pdf"
+    ],
+    "A.6.2.8": [
+      "ops/ClaimsTriageAI-v1-logging-runbook.md"
+    ],
+    "A.9.2": [
+      "roadmap/ai-monitoring-dashboard-proposal-2026-Q2.md"
+    ]
+  },
+  "manual_classifications": {
+    "A.2.3": {
+      "classification": "covered",
+      "justification": "AI policy is an annex of the enterprise information-security policy; cross-references reviewed 2026-Q1."
+    },
+    "A.4.5": {
+      "classification": "not-applicable",
+      "justification": "Organization is a deployer, not a provider, for both inventoried AI systems. Supplier-facing Annex A controls addressed via vendor-management track."
+    },
+    "A.9.2": {
+      "classification": "partially-covered",
+      "justification": "Monitoring dashboard proposal exists; implementation scheduled for 2026-Q2 completion."
+    }
+  },
+  "exclusion_justifications": {
+    "A.10.2": "Third-party provider contracts handled under enterprise vendor-management policy; control formally out of AIMS scope."
+  }
+}

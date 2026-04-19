@@ -58,10 +58,10 @@ The input lives at [input.json](input.json). It describes `ClaimsTriageAI-v1`, a
 
 ## Replay test
 
-[test_demo.py](test_demo.py) runs the demo programmatically and asserts the output shape. Run with:
+[test_audit_log_demo.py](test_audit_log_demo.py) runs the demo programmatically and asserts the output shape. Run with:
 
 ```bash
-python -m pytest demos/audit-log/test_demo.py -v
+python -m pytest demos/audit-log/test_audit_log_demo.py -v
 ```
 
 This test gates merges: the demo must stay green or the PR does not land.
