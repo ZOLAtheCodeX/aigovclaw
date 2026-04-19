@@ -90,11 +90,62 @@ exits with code 2 and prints actionable instructions. See
 
 ## Serve
 
+Starts the command-center HTTP server. Serves the Hub v2 HTML at `/` and the
+live JSON API under `/api/*` (health, tasks, approvals, commands, artifacts).
+
 ```bash
-python3 -m aigovclaw.hub.v2.cli serve --port 8080 --open
+python3 -m hub.v2.cli serve --port 8080 --open
 ```
 
-Binds `127.0.0.1` by default; not reachable from the network.
+From the repo root. Alternative entry points:
+
+```bash
+# Via the top-level aigovclaw hub CLI.
+python3 -m hub.cli hub-v2-serve --port 8080 --open
+```
+
+Binds `127.0.0.1` by default; not reachable from the network. No auth.
+
+## Command center
+
+Once the server is running, open `http://127.0.0.1:8080/` and the Command
+Center panel appears at the top of the sidebar. It shows:
+
+- **Health strip** plugin count, warning count, bundle-signed status, last
+  run timestamp. Polled every 10 seconds.
+- **Quick actions** grid of buttons that enqueue tasks via `POST /api/tasks`.
+  Each maps to a command in `hub/v2_server/command_registry.py`. Destructive
+  commands flagged `requires_approval` land in the approval queue.
+- **Task queue** running / queued / recently completed. Auto-refresh every
+  2 seconds. Pause uses `SIGSTOP`, resume `SIGCONT`, cancel sends `SIGTERM`
+  with a 5-second escalation to `SIGKILL`.
+- **Approval queue** pending approvals with approve / reject controls.
+- **Activity log** reverse-chronological feed, last 100 events.
+- **Executive view** one-click toggle in the top bar. Single-page posture
+  summary with per-framework readiness, big numbers, top-five priorities.
+  Default is Operating view. Persisted in `sessionStorage`.
+
+### API surface
+
+| Method | Path | Description |
+|---|---|---|
+| GET  | `/api/health` | Composite health snapshot. |
+| GET  | `/api/commands` | Public command registry. |
+| GET  | `/api/tasks` | List tasks. Query: `limit`, `since`, `status`. |
+| GET  | `/api/tasks/{id}` | Single task with stdout tail. |
+| POST | `/api/tasks` | Enqueue task. Body: `{command, args}`. |
+| POST | `/api/tasks/{id}/pause` | Suspend running task. |
+| POST | `/api/tasks/{id}/resume` | Resume paused task. |
+| POST | `/api/tasks/{id}/cancel` | Terminate task. |
+| GET  | `/api/artifacts` | Evidence-store artifact metadata. |
+| GET  | `/api/approvals` | Pending approvals. |
+| POST | `/api/approvals/{id}/approve` | Approve and start. |
+| POST | `/api/approvals/{id}/reject` | Reject and cancel. |
+
+Polling, not WebSockets: stdlib-only server, adequate for local use.
+
+Task state persists under `~/.hermes/memory/aigovclaw/hub-v2-tasks/<id>/`.
+Approval records under `~/.hermes/memory/aigovclaw/hub-v2-approvals/`.
 
 ## Non-goals
 

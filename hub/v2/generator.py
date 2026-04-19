@@ -77,6 +77,13 @@ class VendorMissingError(RuntimeError):
 PANEL_CATALOGUE = {
     "groups": [
         {
+            "id": "command-center",
+            "label": "COMMAND CENTER",
+            "items": [
+                {"id": "command-center", "label": "Command center"},
+            ],
+        },
+        {
             "id": "cascade",
             "label": "CASCADE",
             "items": [
@@ -141,6 +148,12 @@ PANEL_CATALOGUE = {
     ],
     # Per-panel metadata. Keep descriptions concise and certification-grade.
     "panels": {
+        "command-center": {
+            "title": "Command center",
+            "group": "COMMAND CENTER",
+            "description": "Live task queue, health strip, approvals, and quick actions. Requires the Hub v2 command-center server.",
+            "plugin": "hub.v2_server",
+        },
         "dashboard": {
             "title": "Dashboard",
             "group": "Home",

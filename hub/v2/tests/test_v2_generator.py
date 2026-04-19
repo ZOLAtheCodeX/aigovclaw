@@ -315,7 +315,8 @@ class V2GeneratorTests(unittest.TestCase):
         self.assertEqual(payload["risk"]["total"], 2)
         self.assertEqual(payload["risk"]["by_tier"]["high"], 1)
         self.assertIn("catalog", payload)
-        self.assertEqual(len(payload["catalog"]["groups"]), 4)
+        # COMMAND CENTER + CASCADE + DISCOVERY + ASSURANCE + GOVERNANCE
+        self.assertEqual(len(payload["catalog"]["groups"]), 5)
 
     # ------------------------------------------------------------------
     # Bespoke renderer coverage
@@ -441,6 +442,85 @@ class V2GeneratorTests(unittest.TestCase):
         self.assertIn("ISO/IEC 42001:2023, Clause 6.1.2", texts)
         self.assertIn("NIST AI RMF GOVERN 1.1", texts)
         self.assertIn("ISO/IEC 42001:2023, Clause 9.2", texts)
+
+    # ------------------------------------------------------------------
+    # Command Center markup (subsystem 2)
+    # ------------------------------------------------------------------
+
+    def test_command_center_panel_registered(self) -> None:
+        _seed_evidence(self.base)
+        v2gen.generate(self.out, evidence_path=self.base)
+        out = self._read()
+        self.assertIn("COMMAND CENTER", out)
+        self.assertIn("CommandCenterPanel", out)
+        self.assertIn("'command-center'", out)
+
+    def test_health_strip_component_present(self) -> None:
+        _seed_evidence(self.base)
+        v2gen.generate(self.out, evidence_path=self.base)
+        out = self._read()
+        self.assertIn("HealthStrip", out)
+        self.assertIn("data-health-strip", out)
+        # Symbols used per project convention (not emojis).
+        self.assertIn("\\u2713", out)  # check
+        self.assertIn("\\u21bb", out)  # refresh
+
+    def test_quick_actions_component_present(self) -> None:
+        _seed_evidence(self.base)
+        v2gen.generate(self.out, evidence_path=self.base)
+        out = self._read()
+        self.assertIn("QuickActions", out)
+        self.assertIn("data-quick-actions", out)
+        self.assertIn("Needs approval", out)
+
+    def test_task_queue_component_present(self) -> None:
+        _seed_evidence(self.base)
+        v2gen.generate(self.out, evidence_path=self.base)
+        out = self._read()
+        self.assertIn("TaskQueue", out)
+        self.assertIn("data-task-queue", out)
+        # Pause/Resume/Cancel buttons rendered from task status.
+        self.assertIn("Pause", out)
+        self.assertIn("Resume", out)
+        self.assertIn("Cancel", out)
+
+    def test_approval_queue_component_present(self) -> None:
+        _seed_evidence(self.base)
+        v2gen.generate(self.out, evidence_path=self.base)
+        out = self._read()
+        self.assertIn("ApprovalQueuePanel", out)
+        self.assertIn("data-approval-queue", out)
+        self.assertIn("Approve", out)
+        self.assertIn("Reject", out)
+
+    def test_activity_log_component_present(self) -> None:
+        _seed_evidence(self.base)
+        v2gen.generate(self.out, evidence_path=self.base)
+        out = self._read()
+        self.assertIn("ActivityLog", out)
+        self.assertIn("data-activity-log", out)
+
+    def test_executive_view_toggle_present(self) -> None:
+        _seed_evidence(self.base)
+        v2gen.generate(self.out, evidence_path=self.base)
+        out = self._read()
+        self.assertIn("ExecutiveView", out)
+        self.assertIn("data-executive-view", out)
+        self.assertIn("Executive view", out)
+        self.assertIn("Operating view", out)
+        self.assertIn("aigovclaw.hub.v2.executiveView", out)
+
+    def test_polling_intervals_configured(self) -> None:
+        _seed_evidence(self.base)
+        v2gen.generate(self.out, evidence_path=self.base)
+        out = self._read()
+        # 2-second and 10-second cadences documented in the polling block.
+        self.assertIn("2000", out)
+        self.assertIn("10000", out)
+        self.assertIn("/api/health", out)
+        self.assertIn("/api/tasks", out)
+        self.assertIn("/api/approvals", out)
+        self.assertIn("/api/commands", out)
 
     def test_extended_plugin_dirs_loaded_by_v2_store(self) -> None:
         """Seed an artifact in a directory the base Store does not load,

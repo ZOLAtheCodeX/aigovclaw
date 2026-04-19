@@ -13,8 +13,6 @@ Stdlib only.
 from __future__ import annotations
 
 import argparse
-import http.server
-import socketserver
 import sys
 import tempfile
 import webbrowser
@@ -48,6 +46,11 @@ def _cmd_generate(args: argparse.Namespace) -> int:
 
 
 def _cmd_serve(args: argparse.Namespace) -> int:
+    """Start the command-center HTTP server.
+
+    Serves the Hub v2 HTML at GET / and the full command-center JSON API
+    under /api/*. See hub/v2_server/server.py for the endpoint list.
+    """
     evidence = resolve_evidence_path(args.evidence)
     if getattr(args, "demo_dir", None):
         demo = Path(args.demo_dir)
@@ -55,45 +58,31 @@ def _cmd_serve(args: argparse.Namespace) -> int:
         written = import_demo_outputs(demo, dst)
         print(f"Imported {len(written)} demo artifacts into {dst}")
         evidence = dst
+
+    # Pre-flight vendor check so the CLI fails fast with the maintainer message
+    # rather than waiting for the first browser hit.
     tmp_root = Path(tempfile.mkdtemp(prefix="aigovclaw-hub-v2-"))
-    out_html = tmp_root / "index.html"
     try:
-        generate(out_html, evidence_path=evidence, aigovops_root=args.aigovops_root)
+        generate(tmp_root / "preflight.html", evidence_path=evidence, aigovops_root=args.aigovops_root)
     except VendorMissingError as err:
         print(str(err), file=sys.stderr)
         return 2
 
-    try:
-        link = tmp_root / evidence.name
-        if evidence.exists() and not link.exists():
-            link.symlink_to(evidence, target_is_directory=True)
-    except OSError:
-        pass
+    # Lazy import to keep the generate path free of server deps.
+    from ..v2_server.server import serve as cc_serve
 
-    host = args.host
-    port = args.port
-
-    class Handler(http.server.SimpleHTTPRequestHandler):
-        def __init__(self, *a, **kw):
-            super().__init__(*a, directory=str(tmp_root), **kw)
-
-        def log_message(self, fmt, *a):
-            sys.stderr.write("[hub-v2] " + (fmt % a) + "\n")
-
-    with socketserver.TCPServer((host, port), Handler) as httpd:
-        url = f"http://{host}:{port}/index.html"
-        print(f"Serving AIGovClaw hub v2 at {url}")
-        print(f"Evidence: {evidence}")
-        print("Ctrl-C to stop.")
-        if args.open:
-            try:
-                webbrowser.open(url)
-            except Exception:
-                pass
+    if args.open:
         try:
-            httpd.serve_forever()
-        except KeyboardInterrupt:
-            print("\nStopped.")
+            webbrowser.open(f"http://{args.host}:{args.port}/")
+        except Exception:
+            pass
+
+    cc_serve(
+        host=args.host,
+        port=args.port,
+        evidence_path=evidence,
+        aigovops_root=args.aigovops_root,
+    )
     return 0
 
 

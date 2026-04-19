@@ -160,7 +160,29 @@ def build_parser() -> argparse.ArgumentParser:
     )
     g2.set_defaults(func=_cmd_generate_v2)
 
+    # hub-v2-serve: start the Hub v2 command-center HTTP server. Serves the
+    # Hub v2 HTML at / and the JSON API under /api/*. Binds 127.0.0.1 by
+    # default. See hub/v2_server/server.py for the endpoint list.
+    sv2 = sub.add_parser(
+        "hub-v2-serve",
+        help="Start the Hub v2 command-center server (HTML + JSON API).",
+    )
+    sv2.add_argument("--port", type=int, default=8080)
+    sv2.add_argument("--host", default="127.0.0.1")
+    sv2.add_argument("--evidence", default=None, help="Override evidence store path.")
+    sv2.add_argument("--aigovops-root", default=None, help="Path to aigovops repo.")
+    sv2.add_argument("--demo-dir", default=None,
+                     help="Reshape aigovops demo-scenario outputs before serving.")
+    sv2.add_argument("--open", action="store_true", help="Open a browser window.")
+    sv2.set_defaults(func=_cmd_hub_v2_serve)
+
     return p
+
+
+def _cmd_hub_v2_serve(args: argparse.Namespace) -> int:
+    # Lazy import to avoid forcing server deps on generate-only paths.
+    from .v2.cli import _cmd_serve as v2_serve  # noqa: WPS433
+    return v2_serve(args)
 
 
 def _cmd_generate_v1(args: argparse.Namespace) -> int:

@@ -738,6 +738,129 @@ kbd {
   .sidebar { position: static; height: auto; }
   .grid-cols-2, .grid-cols-3, .grid-cols-4 { grid-template-columns: 1fr; }
 }
+
+/* Command Center. */
+.health-strip {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  padding: 8px 16px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px;
+  background: var(--surface-3);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
+  font-family: var(--font-display);
+  cursor: pointer;
+}
+.chip.ok { border-color: var(--success-dim); color: var(--success); }
+.chip.warn { border-color: var(--warning-dim); color: var(--warning); }
+.chip.danger { border-color: var(--danger-dim); color: var(--danger); }
+.chip.accent { border-color: var(--accent-dim); color: var(--accent); }
+.chip .sym { font-family: var(--font-mono); }
+
+.quick-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+.quick-action {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.task-queue .task-section { margin-bottom: 12px; }
+.task-section-header {
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  padding: 4px 0;
+}
+.task-section-header .chev { margin-left: 6px; color: var(--text-faint); }
+.task-row {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  margin-bottom: 6px;
+}
+.status-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--border-2);
+  display: inline-block;
+}
+.status-dot.pulse {
+  background: var(--success);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+.stdout-tail {
+  margin-top: 8px;
+  padding: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+.approval-queue .approval-card {
+  padding: 12px;
+  border: 1px solid var(--warning-dim);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+}
+.activity-log ul { list-style: none; padding: 0; }
+.activity-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.activity-row:last-child { border-bottom: none; }
+
+.executive-view .exec-hero { margin-bottom: 16px; }
+.executive-view .exec-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.executive-view .exec-stat {
+  padding: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
+.executive-view .exec-stat .count {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 700;
+}
+.executive-view .exec-stat .count.danger { color: var(--danger); }
+.executive-view .exec-stat .count.warn   { color: var(--warning); }
+.executive-view .exec-stat .count.ok     { color: var(--success); }
+.executive-view .exec-stat .count.accent { color: var(--accent); }
+.executive-view .exec-stat .label {
+  font-family: var(--font-display);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
 """
 
 
@@ -1248,6 +1371,388 @@ APP_JS = r"""
 
   function ValidationGeneric(props) {
     return e('p', { className: 'text-dim text-sm' }, 'No warnings or gaps reported.');
+  }
+
+  // ------------------------------------------------------------------
+  // Command Center components
+  //
+  // The Command Center turns Hub v2 from a static dashboard into a live
+  // operations surface. Components in this block talk to the local
+  // hub/v2_server HTTP API via fetch():
+  //
+  //   GET  /api/health     polled every 10s, drives HealthStrip
+  //   GET  /api/tasks      polled every 2s,  drives TaskQueue
+  //   GET  /api/approvals  polled with tasks, drives ApprovalQueue
+  //   GET  /api/commands   loaded once,      drives QuickActions
+  //   POST /api/tasks      enqueue a task
+  //   POST /api/tasks/:id/pause|resume|cancel
+  //   POST /api/approvals/:id/approve|reject
+  //
+  // The server is optional. When it is not reachable (e.g. the hub was
+  // generated as a static file and opened directly), every component
+  // degrades to a quiet "server offline" placeholder.
+  // ------------------------------------------------------------------
+
+  var API_BASE = (window.__AIGOVCLAW_HUB_V2_API_BASE__ || '');
+  var EXEC_VIEW_KEY = 'aigovclaw.hub.v2.executiveView';
+
+  function apiFetch(path, options) {
+    options = options || {};
+    var url = API_BASE + path;
+    var init = { method: options.method || 'GET', headers: { 'Content-Type': 'application/json' } };
+    if (options.body) init.body = JSON.stringify(options.body);
+    return fetch(url, init).then(function(resp) {
+      if (!resp.ok) {
+        return resp.text().then(function(t) {
+          var err = new Error('HTTP ' + resp.status + ': ' + t);
+          err.status = resp.status;
+          throw err;
+        });
+      }
+      return resp.json();
+    });
+  }
+
+  function useInterval(callback, ms) {
+    var ref = useRef(callback);
+    useEffect(function() { ref.current = callback; }, [callback]);
+    useEffect(function() {
+      if (ms == null) return;
+      var tick = function() { try { ref.current(); } catch (e) {} };
+      tick();
+      var id = setInterval(tick, ms);
+      return function() { clearInterval(id); };
+    }, [ms]);
+  }
+
+  function useServerState() {
+    // Owns health + tasks + approvals + commands, polled on intervals.
+    var _s = useState({
+      health: null, tasks: [], approvals: [], commands: [],
+      serverOnline: null, lastError: null,
+    });
+    var s = _s[0]; var setS = _s[1];
+
+    function merge(part) { setS(function(prev) { return Object.assign({}, prev, part); }); }
+
+    useEffect(function() {
+      apiFetch('/api/commands').then(function(d) {
+        merge({ commands: d.commands || [], serverOnline: true });
+      }).catch(function(err) {
+        merge({ serverOnline: false, lastError: String(err.message || err) });
+      });
+    }, []);
+
+    useInterval(function() {
+      Promise.all([apiFetch('/api/tasks?limit=50'), apiFetch('/api/approvals')])
+        .then(function(res) {
+          merge({
+            tasks: (res[0] && res[0].tasks) || [],
+            approvals: (res[1] && res[1].approvals) || [],
+            serverOnline: true,
+          });
+        })
+        .catch(function(err) { merge({ serverOnline: false, lastError: String(err.message || err) }); });
+    }, 2000);
+
+    useInterval(function() {
+      apiFetch('/api/health')
+        .then(function(h) { merge({ health: h, serverOnline: true }); })
+        .catch(function(err) { merge({ serverOnline: false, lastError: String(err.message || err) }); });
+    }, 10000);
+
+    return s;
+  }
+
+  function HealthStrip(props) {
+    var s = props.server || {};
+    var h = s.health || {};
+    var tasks = s.tasks || [];
+    var running = tasks.filter(function(t) { return t.status === 'running' || t.status === 'paused'; });
+    var lastRun = tasks.filter(function(t) { return ['succeeded','failed','cancelled','interrupted'].indexOf(t.status) >= 0; })[0];
+    function Chip(props) {
+      return e('button', {
+        type: 'button',
+        className: cx('chip', props.tone || ''),
+        onClick: props.onClick,
+        title: props.title,
+      }, props.children);
+    }
+    if (s.serverOnline === false) {
+      return e('div', { className: 'health-strip', role: 'status', 'data-health-strip': '1' },
+        e(Chip, { tone: 'warn', title: 'Command-center server is not reachable. Live data disabled.' }, 'Server offline')
+      );
+    }
+    var warnTone = (h.warning_count || 0) > 0 ? 'warn' : 'ok';
+    return e('div', { className: 'health-strip', role: 'status', 'data-health-strip': '1' },
+      e(Chip, { tone: 'ok', title: 'Plugin count (sibling aigovops repo)', onClick: function() { window.location.hash = '#/command-center'; } },
+        e('span', { className: 'sym' }, '\u2713'), ' ', String(h.plugin_count || 0), ' plugins'),
+      e(Chip, { tone: warnTone, title: 'Open warnings across latest artifacts', onClick: function() { window.location.hash = '#/command-center'; } },
+        e('span', { className: 'sym' }, '\u22ef'), ' ', String(h.warning_count || 0), ' warnings'),
+      e(Chip, { tone: h.bundle_signed ? 'ok' : '', title: 'Latest bundle signature state', onClick: function() { window.location.hash = '#/evidence-bundle-packager'; } },
+        e('span', { className: 'sym' }, h.bundle_signed ? '\u2713' : '\u00b7'), ' ', h.bundle_signed ? 'bundle signed' : 'bundle unsigned'),
+      e(Chip, { tone: '', title: 'Most recent completed task', onClick: function() { window.location.hash = '#/command-center'; } },
+        e('span', { className: 'sym' }, '\u21bb'), ' last run: ', (lastRun && (lastRun.ended_at || lastRun.started_at)) || (h.last_run_at || 'none')),
+      running.length > 0
+        ? e(Chip, { tone: 'accent', title: running.length + ' running task(s)', onClick: function() { window.location.hash = '#/command-center'; } },
+            String(running.length), ' running')
+        : null
+    );
+  }
+
+  function QuickActions(props) {
+    var commands = (props.server && props.server.commands) || [];
+    if (commands.length === 0) {
+      return e('p', { className: 'text-dim text-sm' }, 'No commands available. Server offline or registry empty.');
+    }
+    function onRun(cmd) {
+      // Minimal args prompt for the handful of commands that need input.
+      var args = {};
+      (cmd.args_schema || []).forEach(function(a) {
+        if (!a.required) return;
+        var v = window.prompt('Enter value for ' + a.name + (a.help ? ' (' + a.help + ')' : ''));
+        if (v != null) args[a.name] = v;
+      });
+      apiFetch('/api/tasks', { method: 'POST', body: { command: cmd.id, args: args } })
+        .then(function() { /* polling will pick it up */ })
+        .catch(function(err) { alert('Failed to enqueue: ' + err.message); });
+    }
+    return e('div', { className: 'quick-actions', 'data-quick-actions': '1' },
+      commands.map(function(cmd) {
+        return e('div', { key: cmd.id, className: 'quick-action' },
+          e('div', { className: 'flex items-center justify-between' },
+            e('span', { className: 'font-display font-semibold text-sm' }, cmd.display_name),
+            e(Badge, { tone: cmd.category === 'pipeline' ? 'accent' : cmd.category === 'bundle' ? 'info' : cmd.category === 'diagnostic' ? 'ok' : '' }, cmd.category)
+          ),
+          e('p', { className: 'text-dim text-xs mt-1', title: cmd.description }, cmd.description),
+          cmd.requires_approval ? e(Badge, { tone: 'warn' }, 'Needs approval') : null,
+          e('div', { className: 'mt-2' },
+            e(Button, { variant: 'primary', onClick: function() { onRun(cmd); } }, 'Run')
+          )
+        );
+      })
+    );
+  }
+
+  function TaskRow(props) {
+    var t = props.task;
+    var _open = useState(false); var open = _open[0]; var setOpen = _open[1];
+    var tone = t.status === 'running' ? 'accent' : t.status === 'paused' ? 'warn' : t.status === 'succeeded' ? 'ok' : t.status === 'failed' || t.status === 'cancelled' ? 'danger' : '';
+    function act(action) {
+      apiFetch('/api/tasks/' + t.task_id + '/' + action, { method: 'POST' })
+        .catch(function(err) { alert(action + ' failed: ' + err.message); });
+    }
+    var elapsed = '';
+    if (t.started_at) {
+      try {
+        var d0 = new Date(t.started_at).getTime();
+        var d1 = t.ended_at ? new Date(t.ended_at).getTime() : Date.now();
+        elapsed = Math.max(0, Math.round((d1 - d0) / 1000)) + 's';
+      } catch (e) { /* ignore */ }
+    }
+    return e('div', { className: 'task-row', 'data-task-id': t.task_id },
+      e('div', { className: 'flex items-center gap-3' },
+        e('span', { className: cx('status-dot', tone === 'accent' ? 'pulse' : '') }),
+        e('span', { className: 'font-display text-sm flex-1' }, t.command + ' ', e('span', { className: 'mono text-faint text-xs' }, t.task_id.slice(0, 8))),
+        e(Badge, { tone: tone }, t.status),
+        elapsed ? e('span', { className: 'mono text-xs text-dim' }, elapsed) : null,
+        t.status === 'running' ? e(Button, { onClick: function() { act('pause'); } }, 'Pause') : null,
+        t.status === 'paused' ? e(Button, { onClick: function() { act('resume'); } }, 'Resume') : null,
+        (t.status === 'running' || t.status === 'paused' || t.status === 'queued')
+          ? e(Button, { onClick: function() { act('cancel'); } }, 'Cancel') : null,
+        e(Button, { onClick: function() { setOpen(!open); } }, open ? 'Hide output' : 'Show output')
+      ),
+      open ? e('pre', { className: 'stdout-tail mono text-xs' },
+        (t.stdout_tail || []).slice(-20).join('\n') || '(no output captured yet)'
+      ) : null
+    );
+  }
+
+  function TaskQueue(props) {
+    var tasks = (props.server && props.server.tasks) || [];
+    var running = tasks.filter(function(t) { return t.status === 'running' || t.status === 'paused'; });
+    var queued  = tasks.filter(function(t) { return t.status === 'queued' || t.status === 'awaiting-approval'; });
+    var done    = tasks.filter(function(t) { return ['succeeded','failed','cancelled','interrupted'].indexOf(t.status) >= 0; }).slice(0, 20);
+
+    function Section(props) {
+      var _c = useState(props.defaultOpen !== false); var openSec = _c[0]; var setOpenSec = _c[1];
+      return e('section', { className: 'task-section' },
+        e('h4', {
+          className: 'task-section-header',
+          role: 'button',
+          tabIndex: 0,
+          onClick: function() { setOpenSec(!openSec); },
+        }, props.title, ' ', e('span', { className: 'badge' }, String((props.items || []).length)), e('span', { className: 'chev' }, openSec ? '-' : '+')),
+        openSec ? (
+          (props.items && props.items.length)
+            ? e('div', null, props.items.map(function(t) { return e(TaskRow, { key: t.task_id, task: t }); }))
+            : e('p', { className: 'text-dim text-xs' }, props.empty || 'Nothing here.')
+        ) : null
+      );
+    }
+
+    return e('div', { className: 'task-queue', 'data-task-queue': '1' },
+      e(Section, { title: 'Running', items: running, empty: 'No tasks running.', defaultOpen: true }),
+      e(Section, { title: 'Queued / awaiting approval', items: queued, empty: 'Queue is empty.', defaultOpen: true }),
+      e(Section, { title: 'Recently completed', items: done, empty: 'No completed tasks yet.', defaultOpen: false })
+    );
+  }
+
+  function ApprovalQueuePanel(props) {
+    var approvals = (props.server && props.server.approvals) || [];
+    if (approvals.length === 0) {
+      return e('p', { className: 'text-dim text-sm', 'data-approval-queue': 'empty' }, 'No approvals pending.');
+    }
+    function decide(id, action) {
+      apiFetch('/api/approvals/' + id + '/' + action, { method: 'POST', body: action === 'reject' ? { reason: 'rejected via command center' } : {} })
+        .catch(function(err) { alert(action + ' failed: ' + err.message); });
+    }
+    return e('div', { className: 'approval-queue', 'data-approval-queue': '1' },
+      approvals.map(function(ap) {
+        return e('div', { key: ap.task_id, className: 'approval-card' },
+          e('div', { className: 'flex items-center justify-between' },
+            e('span', { className: 'font-display font-semibold text-sm' }, ap.command),
+            e(Badge, { tone: 'warn' }, 'awaiting approval')
+          ),
+          e('pre', { className: 'mono text-xs text-dim' }, JSON.stringify(ap.args || {}, null, 2)),
+          e('div', { className: 'flex gap-2 mt-2' },
+            e(Button, { variant: 'primary', onClick: function() { decide(ap.task_id, 'approve'); } }, 'Approve'),
+            e(Button, { onClick: function() { decide(ap.task_id, 'reject'); } }, 'Reject')
+          )
+        );
+      })
+    );
+  }
+
+  function ActivityLog(props) {
+    var tasks = (props.server && props.server.tasks) || [];
+    var events = tasks.slice(0, 100).map(function(t) {
+      return {
+        id: t.task_id,
+        at: t.ended_at || t.started_at || t.queued_at,
+        label: t.command,
+        status: t.status,
+        summary: t.summary,
+      };
+    });
+    events.sort(function(a, b) { return (b.at || '').localeCompare(a.at || ''); });
+    return e('div', { className: 'activity-log', 'data-activity-log': '1' },
+      events.length === 0
+        ? e('p', { className: 'text-dim text-sm' }, 'No activity yet.')
+        : e('ul', { className: 'text-sm' }, events.map(function(ev) {
+            return e('li', { key: ev.id, className: 'activity-row' },
+              e('span', { className: 'mono text-xs text-faint', style: { minWidth: 180, display: 'inline-block' } }, ev.at || '-'),
+              e('span', { className: 'mr-2' }, ev.label),
+              e(Badge, { tone: ev.status === 'succeeded' ? 'ok' : ev.status === 'failed' ? 'danger' : '' }, ev.status),
+              ev.summary ? e('span', { className: 'text-dim text-xs ml-2' }, ev.summary) : null
+            );
+          }))
+    );
+  }
+
+  function CommandCenterPanel(props) {
+    var meta = (CATALOG.panels || {})['command-center'] || {};
+    var server = props.server;
+    return e('div', { 'data-command-center': '1' },
+      e(PanelHeader, {
+        crumbs: ['Home', 'COMMAND CENTER', meta.title || 'Command center'],
+        title: meta.title || 'Command center',
+        desc: meta.description || '',
+      }),
+      e(HealthStrip, { server: server }),
+      e(Card, { panelId: 'command-center' },
+        e(CardHeader, null,
+          e(CardTitle, null, 'Quick actions'),
+          e(CardDescription, null, 'Click a button to enqueue a task. Destructive operations require approval.')
+        ),
+        e(QuickActions, { server: server })
+      ),
+      e(Card, { panelId: 'command-center-queue' },
+        e(CardHeader, null,
+          e(CardTitle, null, 'Task queue'),
+          e(CardDescription, null, 'Auto-refresh every 2 seconds. Pause, resume, or cancel running tasks.')
+        ),
+        e(TaskQueue, { server: server })
+      ),
+      e(Card, { panelId: 'command-center-approvals' },
+        e(CardHeader, null,
+          e(CardTitle, null, 'Pending approvals'),
+          e(CardDescription, null, 'Tasks flagged destructive or external wait here until a human decides.')
+        ),
+        e(ApprovalQueuePanel, { server: server })
+      ),
+      e(Card, { panelId: 'command-center-activity' },
+        e(CardHeader, null,
+          e(CardTitle, null, 'Activity log'),
+          e(CardDescription, null, 'Reverse-chronological feed of tasks and decisions. Limit 100.')
+        ),
+        e(ActivityLog, { server: server })
+      )
+    );
+  }
+
+  function ExecutiveView(props) {
+    var server = props.server;
+    var h = (server && server.health) || {};
+    var juris = h.jurisdictions || {};
+    var tasks = (server && server.tasks) || [];
+    var openApprovals = ((server && server.approvals) || []).length;
+    var openWarnings = h.warning_count || 0;
+    var running = tasks.filter(function(t) { return t.status === 'running'; }).length;
+    function StatCard(props) {
+      return e('div', { className: 'exec-stat' },
+        e('div', { className: cx('count', props.tone || '') }, String(props.value)),
+        e('div', { className: 'label' }, props.label)
+      );
+    }
+    var frameworks = [
+      { id: 'iso-42001', label: 'ISO 42001',    fallback: 'unknown' },
+      { id: 'eu-ai-act', label: 'EU AI Act',     fallback: 'unknown' },
+      { id: 'nist-ai-rmf', label: 'NIST AI RMF', fallback: 'unknown' },
+      { id: 'uk-atrs',   label: 'UK ATRS',       fallback: 'unknown' },
+      { id: 'nyc-ll144', label: 'NYC LL 144',    fallback: 'unknown' },
+    ];
+    return e('div', { className: 'executive-view', 'data-executive-view': '1' },
+      e('header', { className: 'exec-hero' },
+        e('div', { className: 'text-xs uppercase tracking-wider text-accent font-display' }, 'AI governance posture'),
+        e('h1', { className: 'font-display text-2xl font-bold' }, 'Your posture at a glance'),
+        e('p', { className: 'text-dim text-sm' }, 'Executive summary. Switch to Operating view for task-level detail.')
+      ),
+      e('div', { className: 'exec-stats' },
+        e(StatCard, { value: (DATA.risk && DATA.risk.by_tier && DATA.risk.by_tier.high) || 0, label: 'High risks', tone: 'danger' }),
+        e(StatCard, { value: (DATA.nonconformity && DATA.nonconformity.open) || 0, label: 'Open nonconformities', tone: 'warn' }),
+        e(StatCard, { value: openApprovals, label: 'Pending approvals', tone: 'warn' }),
+        e(StatCard, { value: openWarnings, label: 'Artifact warnings', tone: 'warn' }),
+        e(StatCard, { value: running, label: 'Tasks running', tone: 'accent' }),
+        e(StatCard, { value: h.plugin_count || 0, label: 'Plugins available', tone: 'ok' })
+      ),
+      e(Card, { panelId: 'executive-frameworks' },
+        e(CardHeader, null,
+          e(CardTitle, null, 'Per-framework readiness')
+        ),
+        e('div', null, frameworks.map(function(f) {
+          var rec = juris[f.id] || {};
+          return e('div', { key: f.id, className: 'flex items-center gap-3 mb-2' },
+            e('span', { className: 'font-display text-sm', style: { minWidth: 140 } }, f.label),
+            e(Badge, { tone: rec.status === 'ready' ? 'ok' : rec.status ? 'warn' : '' }, rec.status || f.fallback)
+          );
+        }))
+      ),
+      e(Card, { panelId: 'executive-now' },
+        e(CardHeader, null,
+          e(CardTitle, null, 'Top five things right now')
+        ),
+        e('ul', { className: 'text-sm' },
+          openApprovals > 0 ? e('li', null, openApprovals + ' pending approval(s). ', e('a', { href: '#/command-center' }, 'Review')) : null,
+          openWarnings > 0 ? e('li', null, openWarnings + ' artifact warning(s) in latest run. ', e('a', { href: '#/command-center' }, 'Inspect')) : null,
+          !h.bundle_signed ? e('li', null, 'Latest bundle is unsigned. ', e('a', { href: '#/evidence-bundle-packager' }, 'Pack')) : null,
+          ((DATA.risk && DATA.risk.by_tier && DATA.risk.by_tier.high) || 0) > 0
+            ? e('li', null, 'High risks require treatment. ', e('a', { href: '#/risk-register-builder' }, 'Open register')) : null,
+          ((DATA.nonconformity && DATA.nonconformity.open) || 0) > 0
+            ? e('li', null, 'Open nonconformities. ', e('a', { href: '#/nonconformity-tracker' }, 'Review')) : null
+        )
+      )
+    );
   }
 
   // ------------------------------------------------------------------
@@ -2264,6 +2769,9 @@ APP_JS = r"""
   }
 
   // Panel dispatch. Each returns the full PanelHeader + card + workspace.
+  // props.server is the shared server state object (health + tasks + approvals
+  // + commands) used by the Command Center components. Non-Command-Center
+  // panels ignore it.
   function Panel(props) {
     var id = props.id;
     var meta = (CATALOG.panels || {})[id] || {};
@@ -2294,6 +2802,10 @@ APP_JS = r"""
 
     if (id === 'cascade-intake') {
       return e(CascadeIntakePanel, { meta: meta });
+    }
+
+    if (id === 'command-center') {
+      return e(CommandCenterPanel, { server: props.server });
     }
 
     if (id === 'dashboard') {
@@ -2685,6 +3197,12 @@ APP_JS = r"""
     var _cmd = useState(false);
     var cmdOpen = _cmd[0]; var setCmdOpen = _cmd[1];
 
+    var _exec = useState(!!safeGet(EXEC_VIEW_KEY, false));
+    var execView = _exec[0]; var setExecView = _exec[1];
+
+    // Server state: health, tasks, approvals, commands. Polled.
+    var server = useServerState();
+
     // Keyboard shortcuts.
     useEffect(function() {
       function onKey(ev) {
@@ -2704,12 +3222,19 @@ APP_JS = r"""
       document.body.setAttribute('data-jurisdiction', j);
     }, [j]);
 
+    function toggleExec() {
+      var next = !execView;
+      setExecView(next);
+      safeSet(EXEC_VIEW_KEY, next);
+    }
+
     if (!DATA.has_any_artifacts && route === 'dashboard') {
       // Welcome page replaces dashboard when the store is empty.
       return e('div', { className: 'app-shell' },
         e(Sidebar, { collapsed: collapsed, setCollapsed: setCollapsed, route: route, navigate: navigate }),
         e('div', { className: 'main-col' },
           e(ActionBanner, { data: DATA.action_required }),
+          e(HealthStrip, { server: server }),
           e(WelcomePage, null)
         )
       );
@@ -2727,10 +3252,15 @@ APP_JS = r"""
           ),
           e('div', { className: 'flex-1' }),
           e(JurisdictionBar, { value: j, onChange: setJ }),
+          e(Button, {
+            onClick: toggleExec,
+            title: 'Switch between executive and operating views',
+          }, execView ? 'Operating view' : 'Executive view'),
           e(Button, { onClick: function() { setCmdOpen(true); }, title: 'Search (press /)' }, 'Search ', e('kbd', null, '/'))
         ),
+        e(HealthStrip, { server: server }),
         e('main', { id: 'content', className: 'content anim-fade-in-up' },
-          e(Panel, { id: route })
+          execView ? e(ExecutiveView, { server: server }) : e(Panel, { id: route, server: server })
         )
       ),
       e(CommandPalette, { open: cmdOpen, onClose: function() { setCmdOpen(false); }, navigate: navigate })
