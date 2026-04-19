@@ -150,6 +150,7 @@ class ActionExecutor:
             "target": request.target,
             "authority_mode": resolution.mode,
             "authority_downgrade_reason": resolution.downgrade_reason,
+            "risk_tier": spec.risk_tier,
             "dry_run": request.dry_run,
             "rationale": request.rationale,
         })
@@ -230,6 +231,7 @@ class ActionExecutor:
             out: list[dict[str, Any]] = []
             for rid, rec in self._pending.items():
                 req: ActionRequest = rec["request"]
+                spec = self.registry.get(req.action_id)
                 out.append({
                     "request_id": rid,
                     "plugin": req.plugin,
@@ -237,6 +239,7 @@ class ActionExecutor:
                     "target": req.target,
                     "rationale": req.rationale,
                     "queued_at": rec.get("queued_at"),
+                    "risk_tier": spec.risk_tier if spec else None,
                 })
             return out
 

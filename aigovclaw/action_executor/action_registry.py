@@ -22,6 +22,38 @@ AUTHORITY_AUTONOMOUS = "autonomous"
 
 VALID_AUTHORITY_MODES = (AUTHORITY_ASK, AUTHORITY_TAKE, AUTHORITY_AUTONOMOUS)
 
+RISK_TIER_LOW = "low"
+RISK_TIER_MEDIUM = "medium"
+RISK_TIER_HIGH = "high"
+RISK_TIER_CRITICAL = "critical"
+
+VALID_RISK_TIERS = (
+    RISK_TIER_LOW,
+    RISK_TIER_MEDIUM,
+    RISK_TIER_HIGH,
+    RISK_TIER_CRITICAL,
+)
+
+RISK_TIER_DESCRIPTIONS = {
+    RISK_TIER_LOW: (
+        "Reversible local action. Snapshot rollback restores prior state. "
+        "No external side effect. Typical default authority: take-resolving-action."
+    ),
+    RISK_TIER_MEDIUM: (
+        "Reversible action that may alter broader agent state. Rollback "
+        "restores files but side effects on in-flight work may remain. "
+        "Typical default authority: take-resolving-action."
+    ),
+    RISK_TIER_HIGH: (
+        "External side effect or non-local reversibility. Remote system or "
+        "human recipient becomes aware. Typical default authority: ask-permission."
+    ),
+    RISK_TIER_CRITICAL: (
+        "Authority-bearing action that cannot be fully reversed once committed "
+        "to a shared destination. Always ask-permission regardless of policy."
+    ),
+}
+
 
 @dataclass
 class ActionRequest:
@@ -75,7 +107,17 @@ class ActionResult:
 
 @dataclass
 class ActionSpec:
-    """Static registry entry for an action type."""
+    """Static registry entry for an action type.
+
+    risk_tier is derived from the safety flags but recorded explicitly so
+    external consumers (authority-policy audits, operator dashboards,
+    Command Centre approval UI) can display it without replicating the
+    derivation rule. Classification rule:
+        reversible and not external_side_effect:     low
+        reversible and     external_side_effect:     medium
+        not reversible and (destructive or external): high
+        git-commit-and-push (push to shared remote): critical
+    """
 
     id: str
     display_name: str
@@ -85,6 +127,7 @@ class ActionSpec:
     default_authority: str
     rate_limit_per_hour: int | None
     args_schema: list[str]
+    risk_tier: str = RISK_TIER_LOW
 
 
 def build_registry() -> dict[str, ActionSpec]:
@@ -106,6 +149,7 @@ def build_registry() -> dict[str, ActionSpec]:
             default_authority=AUTHORITY_ASK,
             rate_limit_per_hour=60,
             args_schema=["path", "updates_dict", "diff_mode"],
+            risk_tier=RISK_TIER_LOW,
         ),
         "mcp-push": ActionSpec(
             id="mcp-push",
@@ -119,6 +163,7 @@ def build_registry() -> dict[str, ActionSpec]:
             default_authority=AUTHORITY_ASK,
             rate_limit_per_hour=20,
             args_schema=["mcp_server", "tool_name", "payload"],
+            risk_tier=RISK_TIER_HIGH,
         ),
         "notification": ActionSpec(
             id="notification",
@@ -133,6 +178,7 @@ def build_registry() -> dict[str, ActionSpec]:
             default_authority=AUTHORITY_TAKE,
             rate_limit_per_hour=120,
             args_schema=["channel", "message", "severity"],
+            risk_tier=RISK_TIER_MEDIUM,
         ),
         "re-run-plugin": ActionSpec(
             id="re-run-plugin",
@@ -146,6 +192,7 @@ def build_registry() -> dict[str, ActionSpec]:
             default_authority=AUTHORITY_TAKE,
             rate_limit_per_hour=60,
             args_schema=["plugin_name"],
+            risk_tier=RISK_TIER_LOW,
         ),
         "trigger-downstream": ActionSpec(
             id="trigger-downstream",
@@ -159,6 +206,7 @@ def build_registry() -> dict[str, ActionSpec]:
             default_authority=AUTHORITY_TAKE,
             rate_limit_per_hour=60,
             args_schema=["cascade_node_id"],
+            risk_tier=RISK_TIER_MEDIUM,
         ),
         "git-commit-and-push": ActionSpec(
             id="git-commit-and-push",
@@ -173,5 +221,6 @@ def build_registry() -> dict[str, ActionSpec]:
             default_authority=AUTHORITY_ASK,
             rate_limit_per_hour=10,
             args_schema=["repo_path", "files", "commit_message", "branch", "push_remote"],
+            risk_tier=RISK_TIER_CRITICAL,
         ),
     }

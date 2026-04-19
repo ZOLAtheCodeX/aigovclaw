@@ -18,10 +18,14 @@ and handlers are implementation details and may change without notice.
 
 from .executor import ActionExecutor, ActionValidationError
 from .action_registry import ActionRequest, ActionResult
+from .audit_event import AuditEvent, AuditEventError, VALID_EVENT_TYPES
 
 __all__ = [
     "ActionExecutor",
     "ActionRequest",
     "ActionResult",
     "ActionValidationError",
+    "AuditEvent",
+    "AuditEventError",
+    "VALID_EVENT_TYPES",
 ]
