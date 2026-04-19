@@ -1,7 +1,7 @@
 """
 AIGovClaw MCP Server
 
-Exposes the AIGovOps plugin catalogue (12 plugins) as Model Context Protocol
+Exposes the AIGovOps plugin catalogue (19 plugins) as Model Context Protocol
 tools over stdio transport. Any MCP-capable client (Claude Desktop, Cursor,
 Zed, a future VerifyWise or Vanta MCP adapter) can invoke AIGovOps governance
 plugins through this server.
@@ -193,7 +193,7 @@ def _populate_registry() -> list[dict[str, Any]]:
 
 
 def build_server() -> Any:
-    """Construct and return a configured MCP Server with all 12 tools.
+    """Construct and return a configured MCP Server with the full tool catalogue.
 
     The returned object has an internal dict _tools keyed by tool name for
     introspection by tests. Callers who want to run stdio must call

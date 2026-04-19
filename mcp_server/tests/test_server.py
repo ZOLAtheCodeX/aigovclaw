@@ -63,7 +63,7 @@ def test_tool_count_matches_catalogue() -> None:
     assert len(server._tools) == len(PLUGIN_TOOL_DEFS), (
         f"expected {len(PLUGIN_TOOL_DEFS)} tools, got {len(server._tools)}"
     )
-    assert len(server._tools) == 12, "expected exactly 12 tools"
+    assert len(server._tools) == 19, "expected exactly 19 tools"
 
 
 def test_every_tool_has_safety_annotations() -> None:
@@ -142,6 +142,70 @@ def test_happy_path_audit_log() -> None:
     )
 
 
+def test_new_uk_atrs_tool_registered() -> None:
+    if _skip_if_no_mcp():
+        return
+    from mcp_server.server import build_server  # type: ignore
+
+    server = build_server()
+    assert "generate_uk_atrs_record" in server._tools, (
+        "generate_uk_atrs_record must be exposed"
+    )
+    entry = server._tools["generate_uk_atrs_record"]
+    ann = entry["annotations"]
+    assert ann["x-aigovops-read-only"] is True
+    assert ann["x-aigovops-concurrency-safe"] is True
+    assert ann["x-aigovops-destructive"] is False
+    assert ann["x-aigovops-source-skill"] == "uk-atrs"
+    assert ann["x-aigovops-artifact-type"] == "uk-atrs-record"
+    schema = entry["inputSchema"]
+    required = set(schema.get("required", []))
+    assert required == {"tier", "tool_description", "owner"}, (
+        f"unexpected required fields: {required}"
+    )
+    tier_spec = schema["properties"]["tier"]
+    assert tier_spec.get("enum") == ["tier-1", "tier-2"], (
+        f"tier enum mismatch: {tier_spec.get('enum')}"
+    )
+
+
+def test_crosswalk_tool_registered() -> None:
+    if _skip_if_no_mcp():
+        return
+    from mcp_server.server import build_server  # type: ignore
+
+    server = build_server()
+    assert "build_crosswalk_matrix" in server._tools, (
+        "build_crosswalk_matrix must be exposed"
+    )
+    entry = server._tools["build_crosswalk_matrix"]
+    schema = entry["inputSchema"]
+    assert "query_type" in schema.get("required", []), (
+        "query_type must be a required input"
+    )
+    query_type_spec = schema["properties"]["query_type"]
+    assert query_type_spec.get("enum") == ["coverage", "gaps", "matrix", "pair"], (
+        f"query_type enum mismatch: {query_type_spec.get('enum')}"
+    )
+
+
+def test_inventory_tool_registered() -> None:
+    if _skip_if_no_mcp():
+        return
+    from mcp_server.server import build_server  # type: ignore
+
+    server = build_server()
+    assert "maintain_ai_system_inventory" in server._tools, (
+        "maintain_ai_system_inventory must be exposed"
+    )
+    entry = server._tools["maintain_ai_system_inventory"]
+    ann = entry["annotations"]
+    assert ann["x-aigovops-source-skill"] == "ai-system-inventory"
+    assert ann["x-aigovops-artifact-type"] == "ai-system-inventory"
+    schema = entry["inputSchema"]
+    assert "systems" in schema.get("required", []), "systems must be required"
+
+
 # ---------------------------------------------------------------------------
 # Standalone runner.
 # ---------------------------------------------------------------------------
@@ -153,6 +217,9 @@ def _run_all() -> int:
         test_every_tool_has_safety_annotations,
         test_invalid_enum_rejected,
         test_happy_path_audit_log,
+        test_new_uk_atrs_tool_registered,
+        test_crosswalk_tool_registered,
+        test_inventory_tool_registered,
     ]
     if not _mcp_available():
         print(

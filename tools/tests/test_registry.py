@@ -200,7 +200,7 @@ def test_plugin_tool_defs_cover_all_plugins():
     names = {d["name"] for d in PLUGIN_TOOL_DEFS}
     # Expected count updates as plugins are added. Each plugin directory has
     # exactly one tool entry.
-    expected_count = 12
+    expected_count = 19
     assert len(names) == expected_count, f"expected {expected_count} tools, got {len(names)}: {sorted(names)}"
     assert len(PLUGIN_TOOL_DEFS) == expected_count
 

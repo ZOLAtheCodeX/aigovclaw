@@ -310,6 +310,173 @@ PLUGIN_TOOL_DEFS: list[dict[str, Any]] = [
         "source_skill": "iso42001",
         "artifact_type": "gap-assessment",
     },
+    {
+        "name": "generate_uk_atrs_record",
+        "plugin": "uk-atrs-recorder",
+        "function": "generate_atrs_record",
+        "description": (
+            "Generate a UK Algorithmic Transparency Recording Standard record for a "
+            "public-sector algorithmic or AI-assisted decision-making tool. Supports "
+            "Tier 1 public summaries and Tier 2 full eight-section records."
+        ),
+        "input_schema": {
+            "tier": {
+                "type": "string", "required": True,
+                "enum": ["tier-1", "tier-2"],
+                "description": "ATRS disclosure tier.",
+            },
+            "tool_description": {"type": "dict", "required": True, "description": "Tool description section content."},
+            "owner": {"type": "dict", "required": True, "description": "Owner and contact section content."},
+            "tool_details": {"type": "dict", "required": False},
+            "impact_assessment": {"type": "dict", "required": False},
+            "data": {"type": "dict", "required": False},
+            "risks": {"type": "dict", "required": False},
+            "governance": {"type": "dict", "required": False},
+            "benefits": {"type": "dict", "required": False},
+            "reviewed_by": {"type": "string", "required": False},
+        },
+        "source_skill": "uk-atrs",
+        "artifact_type": "uk-atrs-record",
+    },
+    {
+        "name": "generate_colorado_compliance_record",
+        "plugin": "colorado-ai-act-compliance",
+        "function": "generate_compliance_record",
+        "description": (
+            "Generate a Colorado SB 205 compliance record for a developer, deployer, "
+            "or both, covering consequential-decision domain obligations, consumer "
+            "notices, and appeal posture."
+        ),
+        "input_schema": {
+            "actor_role": {
+                "type": "string", "required": True,
+                "enum": ["developer", "deployer", "both"],
+                "description": "Actor role under Colorado SB 205.",
+            },
+            "system_description": {"type": "dict", "required": True, "description": "AI system description."},
+            "consequential_decision_domains": {
+                "type": "list", "required": True,
+                "description": "Consequential-decision domains per section 6-1-1701(3).",
+            },
+            "reviewed_by": {"type": "string", "required": False},
+        },
+        "source_skill": "colorado-ai-act",
+        "artifact_type": "colorado-compliance-record",
+    },
+    {
+        "name": "generate_nyc_ll144_audit_package",
+        "plugin": "nyc-ll144-audit-packager",
+        "function": "generate_audit_package",
+        "description": (
+            "Package NYC Local Law 144 bias audit results into the public-disclosure "
+            "bundle and candidate-notice checklist required by DCWP Final Rule 5-300 "
+            "et seq. Does not conduct the audit itself."
+        ),
+        "input_schema": {
+            "aedt_description": {"type": "dict", "required": True, "description": "Automated Employment Decision Tool description."},
+            "employer_role": {
+                "type": "string", "required": True,
+                "enum": ["employer", "employment-agency"],
+                "description": "Employer role under NYC LL 144.",
+            },
+            "audit_data": {"type": "dict", "required": True, "description": "Precomputed selection rates and impact ratios from an independent auditor."},
+            "reviewed_by": {"type": "string", "required": False},
+        },
+        "source_skill": "nyc-ll144",
+        "artifact_type": "nyc-ll144-audit-package",
+    },
+    {
+        "name": "generate_singapore_magf_assessment",
+        "plugin": "singapore-magf-assessor",
+        "function": "generate_magf_assessment",
+        "description": (
+            "Generate a Singapore Model AI Governance Framework pillar-by-pillar "
+            "assessment. Layers MAS FEAT principles for financial-services organizations."
+        ),
+        "input_schema": {
+            "system_description": {"type": "dict", "required": True, "description": "AI system description."},
+            "organization_type": {
+                "type": "string", "required": True,
+                "enum": ["general", "financial-services", "healthcare", "government", "other"],
+                "description": "Organization type for MAS FEAT layering.",
+            },
+            "reviewed_by": {"type": "string", "required": False},
+        },
+        "source_skill": "singapore-ai-governance",
+        "artifact_type": "singapore-magf-assessment",
+    },
+    {
+        "name": "build_crosswalk_matrix",
+        "plugin": "crosswalk-matrix-builder",
+        "function": "build_matrix",
+        "description": (
+            "Query the cross-framework crosswalk dataset for coverage, gaps, a full "
+            "matrix, or a single source-target pair. Results sourced from YAML data "
+            "files; no relationships are invented."
+        ),
+        "input_schema": {
+            "query_type": {
+                "type": "string", "required": True,
+                "enum": ["coverage", "gaps", "matrix", "pair"],
+                "description": "Crosswalk query type.",
+            },
+            "source_framework": {"type": "string", "required": False},
+            "target_framework": {"type": "string", "required": False},
+            "source_id": {"type": "string", "required": False},
+            "reviewed_by": {"type": "string", "required": False},
+        },
+        "source_skill": "cross-framework-crosswalk",
+        "artifact_type": "crosswalk-result",
+    },
+    {
+        "name": "generate_internal_audit_plan",
+        "plugin": "internal-audit-planner",
+        "function": "generate_audit_plan",
+        "description": (
+            "Generate an ISO 42001 Clause 9.2 internal audit programme, schedule, "
+            "criteria mapping, and impartiality assessment. Plans audits; does not "
+            "conduct them."
+        ),
+        "input_schema": {
+            "scope": {"type": "dict", "required": True, "description": "Audit scope definition."},
+            "audit_frequency_months": {"type": "number", "required": True, "description": "Audit cycle frequency in months."},
+            "audit_criteria": {"type": "list", "required": True, "description": "Audit criteria references."},
+            "auditors": {"type": "list", "required": False},
+            "previous_audit_results": {"type": "list", "required": False},
+            "process_importance": {"type": "dict", "required": False},
+            "reporting_recipients": {"type": "list", "required": False},
+            "methods": {"type": "list", "required": False},
+            "start_date": {"type": "string", "required": False},
+            "enrich_with_crosswalk": {"type": "bool", "required": False},
+            "reviewed_by": {"type": "string", "required": False},
+        },
+        "source_skill": "internal-audit",
+        "artifact_type": "internal-audit-plan",
+    },
+    {
+        "name": "maintain_ai_system_inventory",
+        "plugin": "ai-system-inventory-maintainer",
+        "function": "maintain_inventory",
+        "description": (
+            "Validate, version, and enrich an AI system inventory with per-system "
+            "regulatory applicability and cross-framework references. Supports "
+            "create, update, decommission, validate, and full-refresh operations."
+        ),
+        "input_schema": {
+            "systems": {"type": "list", "required": True, "description": "AI system records with required identification and lifecycle fields."},
+            "operation": {
+                "type": "string", "required": False,
+                "enum": ["create", "update", "decommission", "validate", "full-refresh"],
+                "description": "Inventory operation; defaults to validate.",
+            },
+            "previous_inventory_ref": {"type": "dict", "required": False},
+            "decommission_ids": {"type": "list", "required": False},
+            "enrich_with_crosswalk": {"type": "bool", "required": False},
+            "reviewed_by": {"type": "string", "required": False},
+        },
+        "source_skill": "ai-system-inventory",
+        "artifact_type": "ai-system-inventory",
+    },
 ]
 
 

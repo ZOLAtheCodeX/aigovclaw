@@ -1,6 +1,6 @@
 # AIGovClaw MCP Server
 
-Exposes the 12 AIGovOps governance plugins as Model Context Protocol tools.
+Exposes the 19 AIGovOps governance plugins as Model Context Protocol tools.
 Any MCP-capable client (Claude Desktop, Cursor, Zed, future VerifyWise or
 Vanta MCP adapters) can invoke AIGovOps plugins through this server.
 
@@ -24,6 +24,21 @@ is not re-authored here; it is imported from
 | check_applicability | applicability-report | eu-ai-act |
 | classify_risk_tier | risk-tier-classification | eu-ai-act |
 | generate_gap_assessment | gap-assessment | iso42001 |
+
+### Expanded plugin catalogue
+
+The following tools extend coverage to UK, US state, APAC, and program-level
+governance artifacts.
+
+| Tool | Artifact | Source skill |
+|---|---|---|
+| generate_uk_atrs_record | uk-atrs-record | uk-atrs |
+| generate_colorado_compliance_record | colorado-compliance-record | colorado-ai-act |
+| generate_nyc_ll144_audit_package | nyc-ll144-audit-package | nyc-ll144 |
+| generate_singapore_magf_assessment | singapore-magf-assessment | singapore-ai-governance |
+| build_crosswalk_matrix | crosswalk-result | cross-framework-crosswalk |
+| generate_internal_audit_plan | internal-audit-plan | internal-audit |
+| maintain_ai_system_inventory | ai-system-inventory | ai-system-inventory |
 
 ## Install
 
