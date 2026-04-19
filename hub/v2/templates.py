@@ -1250,6 +1250,1010 @@ APP_JS = r"""
     return e('p', { className: 'text-dim text-sm' }, 'No warnings or gaps reported.');
   }
 
+  // ------------------------------------------------------------------
+  // Bespoke-renderer helpers
+  // ------------------------------------------------------------------
+
+  function EmptyPanel(props) {
+    return e('div', { 'data-empty': '1' },
+      e('p', { className: 'text-dim text-sm' }, props.message || 'No artifact data for this panel yet.'),
+      props.hint ? e('div', { className: 'bg-surface-2 border rounded p-3 mono text-xs mt-2' }, props.hint) : null
+    );
+  }
+
+  function latestFor(key) {
+    var entry = (DATA.artifacts || {})[key];
+    if (!entry || !entry.latest) return null;
+    return entry.latest;
+  }
+
+  function countFor(key) {
+    var entry = (DATA.artifacts || {})[key];
+    return (entry && entry.count) || 0;
+  }
+
+  function warningsFor(key) {
+    var latest = latestFor(key);
+    if (!latest) return [];
+    var w = latest.warnings;
+    return Array.isArray(w) ? w : [];
+  }
+
+  function ValidationFromWarnings(props) {
+    var warns = warningsFor(props.storeKey);
+    if (warns.length === 0) return e(Alert, { tone: 'ok' }, 'No warnings reported in the latest artifact.');
+    return e('div', null,
+      e('p', { className: 'text-dim text-sm mb-2' }, String(warns.length) + ' warning(s) in latest artifact.'),
+      e('ul', { className: 'text-sm' }, warns.slice(0, 50).map(function(w, i) {
+        var text = typeof w === 'string' ? w : (w && (w.message || w.text || w.reason)) || JSON.stringify(w);
+        return e('li', { key: i, className: 'mb-1 text-dim' }, '- ', text);
+      }))
+    );
+  }
+
+  function GuidanceSkill(props) {
+    var panelMeta = (CATALOG.panels || {})[props.panelId] || {};
+    return e('div', null,
+      e('p', { className: 'text-dim text-sm mb-3' }, props.purpose || panelMeta.description || 'Plugin guidance.'),
+      panelMeta.plugin ? e('div', { className: 'mb-2' },
+        e('span', { className: 'text-faint text-xs uppercase tracking-wide font-display' }, 'Plugin'),
+        e('div', { className: 'mono text-sm mt-1' }, panelMeta.plugin)
+      ) : null,
+      panelMeta.skill ? e('div', { className: 'mb-2' },
+        e('span', { className: 'text-faint text-xs uppercase tracking-wide font-display' }, 'Skill source'),
+        e('div', { className: 'mono text-sm mt-1' }, panelMeta.skill)
+      ) : null,
+      props.citations && props.citations.length
+        ? e('div', { className: 'mb-2' },
+            e('span', { className: 'text-faint text-xs uppercase tracking-wide font-display' }, 'Key citations'),
+            e('ul', { className: 'text-sm mt-1' }, props.citations.map(function(c, i) {
+              return e('li', { key: i, className: 'text-dim mono' }, '- ', c);
+            })))
+        : null,
+      panelMeta.frameworks && panelMeta.frameworks.length
+        ? e('div', { className: 'mt-3 flex flex-wrap gap-2' },
+            panelMeta.frameworks.map(function(f, i) { return e(Badge, { key: i, tone: 'info' }, f); }))
+        : null
+    );
+  }
+
+  function SimpleTable(props) {
+    var cols = props.cols || [];
+    var rows = props.rows || [];
+    return e('div', { className: 'overflow-x-auto' },
+      e('table', null,
+        e('thead', null, e('tr', null, cols.map(function(c, i) { return e('th', { key: i }, c.label); }))),
+        e('tbody', null, rows.slice(0, props.max || 100).map(function(r, i) {
+          return e('tr', { key: i }, cols.map(function(c, j) {
+            var val = c.render ? c.render(r) : (r[c.key] == null ? '-' : String(r[c.key]));
+            return e('td', { key: j, className: c.mono ? 'mono' : '' }, val);
+          }));
+        }))
+      )
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // Bespoke renderer triples
+  // Every renderer is guarded with ?. / || fallbacks; missing data
+  // resolves to EmptyPanel. Each component is tagged with a data-panel
+  // attribute on its outermost wrapper for tests.
+  // ------------------------------------------------------------------
+
+  // CASCADE group
+
+  function GuidanceRegFeed() {
+    return e(GuidanceSkill, { panelId: 'framework-monitor',
+      purpose: 'Continuous monitor of authoritative framework URLs. Flags changes, new clauses, retirements.',
+      citations: ['ISO/IEC 42001:2023, Clause 4.1', 'EU AI Act, Article 112'] });
+  }
+  function ArtifactsRegFeed() {
+    var latest = latestFor('framework-monitor');
+    if (!latest) return e(EmptyPanel, { message: 'No regulatory feed runs recorded yet.', hint: 'workflows/framework-monitor emits detections under ~/.hermes/memory/aigovclaw/framework-monitor/' });
+    var changes = latest.changes || latest.detections || [];
+    return e('div', { 'data-panel': 'regulatory-feed' },
+      e('p', { className: 'text-dim text-sm mb-2' }, String(changes.length) + ' changes detected at last run.'),
+      e(SimpleTable, { cols: [
+        { key: 'framework', label: 'Framework' },
+        { key: 'url', label: 'URL', mono: true },
+        { key: 'detected_at', label: 'Detected', mono: true },
+        { key: 'change_type', label: 'Change' },
+      ], rows: changes })
+    );
+  }
+
+  function GuidanceApplicability() {
+    return e(GuidanceSkill, { panelId: 'applicability-checker',
+      purpose: 'Per-system jurisdiction applicability matrix. Cascade downstream filters from this output.',
+      citations: ['EU AI Act, Article 2', 'EU AI Act, Article 113', 'Colorado SB 205, Section 6-1-1701', 'NYC LL144, Section 20-871'] });
+  }
+  function ArtifactsApplicability() {
+    var latest = latestFor('applicability-checker');
+    if (!latest) return e(EmptyPanel, { message: 'No applicability assessment artifacts.' });
+    var matrix = latest.regulatory_applicability_matrix || latest.matrix || latest.systems || [];
+    return e('div', { 'data-panel': 'applicability' },
+      e('p', { className: 'text-dim text-sm mb-2' }, 'Applicability matrix for ' + (matrix.length || 0) + ' systems.'),
+      e(SimpleTable, { cols: [
+        { key: 'system_id', label: 'System', mono: true },
+        { key: 'eu_ai_act', label: 'EU', render: function(r) { return e(Badge, { tone: r.eu_ai_act ? 'accent' : '' }, r.eu_ai_act || r.eu_tier || '-'); } },
+        { key: 'uk_atrs', label: 'UK', render: function(r) { return e(Badge, { tone: r.uk_atrs ? 'info' : '' }, r.uk_atrs || '-'); } },
+        { key: 'colorado', label: 'CO', render: function(r) { return e(Badge, { tone: r.colorado ? 'warn' : '' }, r.colorado || '-'); } },
+        { key: 'nyc_ll144', label: 'NYC', render: function(r) { return e(Badge, { tone: r.nyc_ll144 ? 'warn' : '' }, r.nyc_ll144 || '-'); } },
+      ], rows: matrix })
+    );
+  }
+
+  // DISCOVERY group
+
+  function GuidanceGapExplorer() {
+    return e(GuidanceSkill, { panelId: 'gap-explorer',
+      purpose: 'Unified gap navigator across gap-assessment coverage and crosswalk no-mapping entries.',
+      citations: ['ISO/IEC 42001:2023, Clause 6.1.1', 'NIST AI RMF GOVERN 1.1'] });
+  }
+  function ArtifactsGapExplorer() {
+    var gap = DATA.gap || { frameworks: [] };
+    var cw = (DATA.crosswalk && DATA.crosswalk.mappings) || [];
+    var nomap = cw.filter(function(m) { return (m.relationship || '').toLowerCase().indexOf('no-mapping') !== -1 || (m.relationship || '').toLowerCase() === 'none'; });
+    if ((gap.frameworks || []).length === 0 && nomap.length === 0) {
+      return e(EmptyPanel, { message: 'No gap-assessment artifacts and no no-mapping crosswalk entries.' });
+    }
+    return e('div', { 'data-panel': 'gap-explorer' },
+      e('h3', { className: 'font-display text-sm mb-2' }, 'Framework coverage'),
+      (gap.frameworks || []).map(function(fw, i) { return e(CoverageBar, { key: i, label: fw.label, pct: fw.pct }); }),
+      e('h3', { className: 'font-display text-sm mt-4 mb-2' }, 'No-mapping entries (' + nomap.length + ')'),
+      nomap.length === 0
+        ? e('p', { className: 'text-dim text-sm' }, 'None.')
+        : e(SimpleTable, { cols: [
+            { key: 'source_fw', label: 'Source FW' },
+            { key: 'source_ref', label: 'Source ref', mono: true },
+            { key: 'target_fw', label: 'Target FW' },
+            { key: 'relationship', label: 'Relationship' },
+          ], rows: nomap, max: 50 })
+    );
+  }
+
+  function GuidanceCitationSearch() {
+    return e(GuidanceSkill, { panelId: 'citation-search',
+      purpose: 'Client-side full-text search across every citation emitted by any plugin artifact. No backend.',
+      citations: ['See STYLE.md for citation format'] });
+  }
+  function ArtifactsCitationSearch() {
+    var _q = useState('');
+    var q = _q[0]; var setQ = _q[1];
+    var cits = DATA.citations_index || [];
+    var ql = q.toLowerCase();
+    var rows = useMemo(function() {
+      if (!q) return cits.slice(0, 200);
+      return cits.filter(function(c) {
+        return (c.text || '').toLowerCase().indexOf(ql) !== -1 || (c.source || '').toLowerCase().indexOf(ql) !== -1;
+      }).slice(0, 200);
+    }, [cits, q]);
+    if (cits.length === 0) return e(EmptyPanel, { message: 'No citations indexed. Run a plugin to produce artifacts that include citations.' });
+    return e('div', { 'data-panel': 'citation-search' },
+      e(Input, { placeholder: 'Search citations', value: q, onChange: function(ev) { setQ(ev.target.value); } }),
+      e('p', { className: 'text-faint text-xs mt-2 font-mono' }, 'Showing ' + rows.length + ' of ' + cits.length + ' citations.'),
+      e('div', { className: 'overflow-x-auto mt-2' },
+        e('table', null,
+          e('thead', null, e('tr', null, e('th', null, 'Source plugin'), e('th', null, 'Citation'))),
+          e('tbody', null, rows.map(function(r, i) {
+            return e('tr', { key: i },
+              e('td', null, e(Badge, { tone: 'info' }, r.source)),
+              e('td', { className: 'mono' }, r.text)
+            );
+          }))
+        )
+      )
+    );
+  }
+
+  // ASSURANCE group
+
+  function GuidanceAISystems() {
+    return e(GuidanceSkill, { panelId: 'ai-system-inventory-maintainer',
+      purpose: 'Validated, versioned AI system inventory. Each system carries lifecycle state and applicability.',
+      citations: ['ISO/IEC 42001:2023, Annex A, Control A.6.1', 'EU AI Act, Article 11'] });
+  }
+  function ArtifactsAISystems() {
+    var latest = latestFor('ai-system-inventory-maintainer');
+    if (!latest) return e(EmptyPanel, { message: 'No AI system inventory recorded yet.' });
+    var systems = latest.systems || [];
+    var summary = latest.summary || {};
+    return e('div', { 'data-panel': 'ai-systems-registry' },
+      e(TileRow, { tiles: [
+        { count: summary.total_systems || systems.length || 0, label: 'Systems', tone: 'accent' },
+        { count: (summary.systems_with_warnings || 0), label: 'With warnings', tone: 'warn' },
+        { count: (summary.systems_missing_required_fields || 0), label: 'Missing fields', tone: 'danger' },
+      ]}),
+      e(SimpleTable, { cols: [
+        { key: 'system_id', label: 'System ID', mono: true },
+        { key: 'name', label: 'Name' },
+        { key: 'lifecycle_state', label: 'Lifecycle', render: function(r) { return e(Badge, { tone: r.lifecycle_state === 'production' ? 'ok' : r.lifecycle_state === 'retired' ? '' : 'info' }, r.lifecycle_state || '-'); } },
+        { key: 'risk_tier', label: 'Tier', render: function(r) { return e(Badge, { tone: r.risk_tier === 'high' ? 'danger' : r.risk_tier === 'medium' ? 'warn' : 'ok' }, r.risk_tier || '-'); } },
+      ], rows: systems })
+    );
+  }
+
+  function GuidanceAISIA() {
+    return e(GuidanceSkill, { panelId: 'aisia-runner',
+      purpose: 'AI System Impact Assessment with FRIA coverage per EU AI Act Article 27.',
+      citations: ['ISO/IEC 42001:2023, Clause 6.1.4', 'EU AI Act, Article 27', 'NIST AI RMF MAP 1.x'] });
+  }
+  function ArtifactsAISIA() {
+    var latest = latestFor('aisia');
+    if (!latest) return e(EmptyPanel, { message: 'No AISIA artifacts.' });
+    var assessments = latest.assessments || latest.systems || [latest];
+    var FRIA_ELEMENTS = ['purpose', 'affected_persons', 'risks', 'measures', 'monitoring', 'complaints'];
+    return e('div', { 'data-panel': 'aisia-viewer' },
+      e('p', { className: 'text-dim text-sm mb-2' }, String(assessments.length) + ' assessment(s).'),
+      assessments.slice(0, 20).map(function(a, i) {
+        var fria = a.fria || a.fria_coverage || {};
+        return e('details', { key: i, className: 'card mb-2', style: { padding: 12 } },
+          e('summary', { className: 'font-display font-medium cursor-pointer' },
+            (a.system_id || a.name || 'Assessment ' + (i+1)),
+            ' ',
+            e(Badge, { tone: a.eu_high_risk ? 'danger' : 'info' }, a.eu_high_risk ? 'High risk' : (a.risk_tier || 'assessed'))
+          ),
+          e('div', { className: 'mt-2 grid grid-cols-3 gap-2' },
+            FRIA_ELEMENTS.map(function(k) {
+              var present = fria[k] || a[k];
+              return e('div', { key: k, className: 'tile' },
+                e('span', { className: 'count ' + (present ? 'ok' : 'danger') }, present ? 'yes' : 'no'),
+                e('span', { className: 'label' }, k.replace(/_/g, ' '))
+              );
+            })
+          )
+        );
+      })
+    );
+  }
+
+  function GuidanceAuditLog() {
+    return e(GuidanceSkill, { panelId: 'audit-log-generator',
+      purpose: 'Reverse-chronological audit log of governance events with clause tags.',
+      citations: ['ISO/IEC 42001:2023, Clause 7.5', 'ISO/IEC 42001:2023, Clause 9.2'] });
+  }
+  function ArtifactsAuditLog() {
+    var latest = latestFor('audit-log-generator');
+    if (!latest) return e(EmptyPanel, { message: 'No audit log entries.' });
+    var events = latest.events || latest.entries || [];
+    events = events.slice().reverse();
+    return e('div', { 'data-panel': 'audit-log' },
+      e('p', { className: 'text-dim text-sm mb-2' }, String(events.length) + ' events recorded.'),
+      e(SimpleTable, { cols: [
+        { key: 'timestamp', label: 'When', mono: true },
+        { key: 'actor', label: 'Actor' },
+        { key: 'action', label: 'Action' },
+        { key: 'clause', label: 'Clause', render: function(r) { return r.clause ? e(Badge, { tone: 'info' }, r.clause) : '-'; } },
+      ], rows: events, max: 100 })
+    );
+  }
+
+  function GuidanceMetrics() {
+    return e(GuidanceSkill, { panelId: 'metrics-collector',
+      purpose: 'KPI dashboard with threshold-breach indicators per NIST MEASURE 2.x.',
+      citations: ['NIST AI RMF MEASURE 2.1', 'NIST AI 600-1, Action MS-2.x'] });
+  }
+  function ArtifactsMetrics() {
+    var latest = latestFor('metrics');
+    if (!latest) return e(EmptyPanel, { message: 'No metrics artifacts.' });
+    var kpis = latest.kpi_records || latest.kpis || [];
+    var breaches = latest.threshold_breaches || [];
+    var breachIds = {};
+    breaches.forEach(function(b) { if (b && b.kpi_id) breachIds[b.kpi_id] = b; });
+    return e('div', { 'data-panel': 'metrics' },
+      e(TileRow, { tiles: [
+        { count: kpis.length, label: 'KPIs tracked', tone: 'accent' },
+        { count: breaches.length, label: 'Breaches', tone: breaches.length > 0 ? 'danger' : 'ok' },
+      ]}),
+      e(SimpleTable, { cols: [
+        { key: 'id', label: 'KPI', mono: true },
+        { key: 'name', label: 'Name' },
+        { key: 'value', label: 'Value', mono: true },
+        { key: 'threshold', label: 'Threshold', mono: true },
+        { key: 'status', label: 'Status', render: function(r) {
+          var breach = breachIds[r.id];
+          return e(Badge, { tone: breach ? 'danger' : 'ok' }, breach ? 'Breach' : 'OK');
+        } },
+      ], rows: kpis })
+    );
+  }
+
+  function GuidancePMM() {
+    return e(GuidanceSkill, { panelId: 'post-market-monitoring',
+      purpose: 'Per-dimension cadence and trigger catalogue for post-market monitoring.',
+      citations: ['EU AI Act, Article 72', 'ISO/IEC 42001:2023, Clause 9.1', 'NIST AI RMF MANAGE 4.1'] });
+  }
+  function ArtifactsPMM() {
+    var latest = latestFor('post-market-monitoring');
+    if (!latest) return e(EmptyPanel, { message: 'No post-market monitoring plan.' });
+    var dimensions = latest.dimensions || latest.rows || [];
+    var triggers = latest.triggers || latest.trigger_catalogue || [];
+    return e('div', { 'data-panel': 'post-market-monitoring' },
+      e('h3', { className: 'font-display text-sm mb-2' }, 'Per-dimension cadence (' + dimensions.length + ')'),
+      e(SimpleTable, { cols: [
+        { key: 'dimension', label: 'Dimension' },
+        { key: 'cadence', label: 'Cadence' },
+        { key: 'owner', label: 'Owner' },
+        { key: 'metric', label: 'Metric', mono: true },
+      ], rows: dimensions }),
+      e('h3', { className: 'font-display text-sm mt-4 mb-2' }, 'Trigger catalogue (' + triggers.length + ')'),
+      e(SimpleTable, { cols: [
+        { key: 'trigger', label: 'Trigger' },
+        { key: 'threshold', label: 'Threshold', mono: true },
+        { key: 'response', label: 'Response' },
+      ], rows: triggers })
+    );
+  }
+
+  function GuidanceRobustness() {
+    return e(GuidanceSkill, { panelId: 'robustness-evaluator',
+      purpose: 'Point-in-time robustness evaluation with per-dimension pass/fail and adversarial posture.',
+      citations: ['EU AI Act, Article 15', 'ISO/IEC 42001:2023, Annex A, Control A.6.2.4', 'NIST AI RMF MEASURE 2.5'] });
+  }
+  function ArtifactsRobustness() {
+    var latest = latestFor('robustness-evaluator');
+    if (!latest) return e(EmptyPanel, { message: 'No robustness evaluation recorded.' });
+    var dims = latest.dimensions || latest.results || [];
+    var posture = latest.adversarial_posture || latest.posture || '-';
+    return e('div', { 'data-panel': 'robustness' },
+      e('div', { className: 'mb-3' },
+        e('span', { className: 'text-faint text-xs uppercase tracking-wide' }, 'Adversarial posture'),
+        e('div', { className: 'mt-1' }, e(Badge, { tone: posture === 'mature' ? 'ok' : posture === 'developing' ? 'warn' : 'danger' }, String(posture)))
+      ),
+      e(SimpleTable, { cols: [
+        { key: 'dimension', label: 'Dimension' },
+        { key: 'result', label: 'Result', render: function(r) { return e(Badge, { tone: r.result === 'pass' ? 'ok' : r.result === 'fail' ? 'danger' : 'warn' }, r.result || '-'); } },
+        { key: 'resilience_level', label: 'Resilience' },
+        { key: 'evidence', label: 'Evidence', mono: true },
+      ], rows: dims })
+    );
+  }
+
+  function GuidanceBias() {
+    return e(GuidanceSkill, { panelId: 'bias-evaluator',
+      purpose: 'Fairness metrics per protected group with jurisdictional rule application.',
+      citations: ['NYC LL144, Section 5-303', 'EU AI Act, Article 10(4)', 'Colorado SB 205, Section 6-1-1702(1)'] });
+  }
+  function ArtifactsBias() {
+    var latest = latestFor('bias-evaluator');
+    if (!latest) return e(EmptyPanel, { message: 'No bias evaluation artifacts.' });
+    var metrics = latest.metrics || latest.results || [];
+    var findings = latest.rule_findings || latest.findings || [];
+    return e('div', { 'data-panel': 'bias' },
+      e('h3', { className: 'font-display text-sm mb-2' }, 'Per-metric results'),
+      e(SimpleTable, { cols: [
+        { key: 'protected_attribute', label: 'Attribute' },
+        { key: 'metric', label: 'Metric' },
+        { key: 'value', label: 'Value', mono: true },
+        { key: 'reference_group', label: 'Reference' },
+      ], rows: metrics }),
+      e('h3', { className: 'font-display text-sm mt-4 mb-2' }, 'Jurisdictional rule findings (' + findings.length + ')'),
+      e(SimpleTable, { cols: [
+        { key: 'jurisdiction', label: 'Jurisdiction' },
+        { key: 'rule', label: 'Rule' },
+        { key: 'status', label: 'Status', render: function(r) { return e(Badge, { tone: r.status === 'pass' ? 'ok' : 'danger' }, r.status || '-'); } },
+        { key: 'detail', label: 'Detail' },
+      ], rows: findings })
+    );
+  }
+
+  function GuidanceBundle() {
+    return e(GuidanceSkill, { panelId: 'evidence-bundle-packager',
+      purpose: 'Deterministic evidence bundles with optional HMAC-SHA256 signing and provenance chain.',
+      citations: ['ISO/IEC 42001:2023, Clause 7.5.3'] });
+  }
+  function ArtifactsBundle() {
+    var latest = latestFor('evidence-bundle-packager');
+    if (!latest) return e(EmptyPanel, { message: 'No evidence bundles packaged.' });
+    var manifest = latest.manifest || {};
+    var artifacts = manifest.artifacts || latest.artifacts_list || [];
+    return e('div', { 'data-panel': 'bundle-inspector' },
+      e(TileRow, { tiles: [
+        { count: artifacts.length, label: 'Artifacts', tone: 'accent' },
+        { count: manifest.total_size_bytes || 0, label: 'Bytes' },
+        { count: latest.signed ? 1 : 0, label: 'Signed', tone: latest.signed ? 'ok' : 'warn' },
+      ]}),
+      e('div', { className: 'bg-surface-2 border rounded p-3 mb-3' },
+        e('span', { className: 'text-faint text-xs uppercase tracking-wide' }, 'Signature'),
+        e('div', { className: 'mono text-xs mt-1 break-all' }, latest.signature || '(unsigned)')
+      ),
+      e(SimpleTable, { cols: [
+        { key: 'path', label: 'Path', mono: true },
+        { key: 'sha256', label: 'SHA-256', mono: true, render: function(r) { return (r.sha256 || '').slice(0, 16) + '...'; } },
+        { key: 'size', label: 'Size', mono: true },
+      ], rows: artifacts })
+    );
+  }
+
+  function GuidanceCertReady() {
+    return e(GuidanceSkill, { panelId: 'certification-readiness',
+      purpose: 'Graduated readiness verdict against a target certification with gaps and remediations.',
+      citations: ['ISO/IEC 42001:2023 (full standard)'] });
+  }
+  function ArtifactsCertReady() {
+    var latest = latestFor('certification-readiness');
+    if (!latest) return e(EmptyPanel, { message: 'No certification readiness assessment yet.' });
+    var verdict = latest.verdict || latest.readiness_verdict || 'not-assessed';
+    var gaps = latest.gaps || [];
+    var remediations = latest.remediations || [];
+    var verdictTone = verdict === 'ready' ? 'ok' : verdict === 'ready-with-conditions' ? 'warn' : verdict === 'partially-ready' ? 'warn' : 'danger';
+    return e('div', { 'data-panel': 'certification-readiness' },
+      e('div', { className: 'card mb-3 text-center' },
+        e('span', { className: 'text-faint text-xs uppercase tracking-wide font-display' }, 'Verdict'),
+        e('div', { className: 'mt-2' }, e(Badge, { tone: verdictTone }, String(verdict)))
+      ),
+      e('h3', { className: 'font-display text-sm mb-2' }, 'Gaps (' + gaps.length + ')'),
+      e(SimpleTable, { cols: [
+        { key: 'clause', label: 'Clause' },
+        { key: 'description', label: 'Description' },
+        { key: 'severity', label: 'Severity', render: function(r) { return e(Badge, { tone: r.severity === 'blocker' ? 'danger' : r.severity === 'major' ? 'warn' : '' }, r.severity || '-'); } },
+      ], rows: gaps }),
+      e('h3', { className: 'font-display text-sm mt-4 mb-2' }, 'Remediations (' + remediations.length + ')'),
+      e(SimpleTable, { cols: [
+        { key: 'action', label: 'Action' },
+        { key: 'owner', label: 'Owner' },
+        { key: 'target_plugin', label: 'Target plugin', mono: true },
+        { key: 'due', label: 'Due', mono: true },
+      ], rows: remediations })
+    );
+  }
+
+  // GOVERNANCE group
+
+  function GuidanceMgmtReview() {
+    return e(GuidanceSkill, { panelId: 'management-review-packager',
+      purpose: 'ISO 42001 Clause 9.3.2 management review input package (nine categories).',
+      citations: ['ISO/IEC 42001:2023, Clause 9.3.2'] });
+  }
+  function ArtifactsMgmtReview() {
+    var latest = latestFor('management-review-packager');
+    if (!latest) return e(EmptyPanel, { message: 'No management review package prepared.' });
+    var inputs = latest.inputs || latest.package || {};
+    var CATS = [
+      { k: 'a', label: 'a. Status of prior actions' },
+      { k: 'b', label: 'b. Changes in external/internal issues' },
+      { k: 'c', label: 'c. Information on AIMS performance' },
+      { k: 'd', label: 'd. Feedback from interested parties' },
+      { k: 'e', label: 'e. Results of risk assessment' },
+      { k: 'f', label: 'f. Risk treatment status' },
+      { k: 'g', label: 'g. Adequacy of resources' },
+      { k: 'h', label: 'h. Opportunities for improvement' },
+      { k: 'i', label: 'i. Need for changes to the AIMS' },
+    ];
+    return e('div', { 'data-panel': 'management-review' },
+      CATS.map(function(c) {
+        var val = inputs[c.k] || inputs[c.label] || inputs['category_' + c.k];
+        var hasContent = val && (typeof val === 'string' ? val.length > 0 : (Array.isArray(val) ? val.length > 0 : true));
+        return e('details', { key: c.k, className: 'card mb-2', style: { padding: 12 } },
+          e('summary', { className: 'font-display font-medium cursor-pointer' }, c.label, ' ',
+            e(Badge, { tone: hasContent ? 'ok' : 'warn' }, hasContent ? 'prepared' : 'missing')),
+          e('div', { className: 'text-dim text-sm mt-2' },
+            typeof val === 'string' ? val : (val ? JSON.stringify(val, null, 2) : 'No input prepared.'))
+        );
+      })
+    );
+  }
+
+  function GuidanceAuditPlan() {
+    return e(GuidanceSkill, { panelId: 'internal-audit-planner',
+      purpose: 'Internal audit schedule plus impartiality assessment for auditor assignments.',
+      citations: ['ISO/IEC 42001:2023, Clause 9.2'] });
+  }
+  function ArtifactsAuditPlan() {
+    var latest = latestFor('internal-audit-planner');
+    if (!latest) return e(EmptyPanel, { message: 'No internal audit plan prepared.' });
+    var schedule = latest.schedule || latest.audits || [];
+    var imp = latest.impartiality || latest.impartiality_assessment || {};
+    var warns = (imp.warnings || []);
+    return e('div', { 'data-panel': 'internal-audit' },
+      e('h3', { className: 'font-display text-sm mb-2' }, 'Audit schedule (' + schedule.length + ')'),
+      e(SimpleTable, { cols: [
+        { key: 'scope', label: 'Scope' },
+        { key: 'auditor', label: 'Auditor' },
+        { key: 'criteria', label: 'Criteria' },
+        { key: 'scheduled_date', label: 'Scheduled', mono: true },
+      ], rows: schedule }),
+      warns.length > 0
+        ? e(Alert, { tone: 'warn' }, 'Impartiality warnings (' + warns.length + '):',
+            e('ul', null, warns.map(function(w, i) { return e('li', { key: i }, typeof w === 'string' ? w : JSON.stringify(w)); })))
+        : e(Alert, { tone: 'ok' }, 'No impartiality conflicts detected.')
+    );
+  }
+
+  function GuidanceRoleMatrix() {
+    return e(GuidanceSkill, { panelId: 'role-matrix-generator',
+      purpose: 'RACI matrix mapping roles to governance decisions.',
+      citations: ['ISO/IEC 42001:2023, Clause 5.3'] });
+  }
+  function ArtifactsRoleMatrix() {
+    var latest = latestFor('role-matrix-generator');
+    if (!latest) return e(EmptyPanel, { message: 'No role matrix produced.' });
+    var rows = latest.matrix || latest.rows || [];
+    return e('div', { 'data-panel': 'role-matrix' },
+      e('p', { className: 'text-dim text-sm mb-2' }, String(rows.length) + ' role/decision rows.'),
+      e(SimpleTable, { cols: [
+        { key: 'decision', label: 'Decision' },
+        { key: 'role', label: 'Role' },
+        { key: 'raci', label: 'RACI', render: function(r) {
+          var v = (r.raci || r.assignment || '').toUpperCase();
+          var tone = v === 'R' ? 'accent' : v === 'A' ? 'danger' : v === 'C' ? 'info' : v === 'I' ? '' : '';
+          return e(Badge, { tone: tone }, v || '-');
+        } },
+      ], rows: rows, max: 200 })
+    );
+  }
+
+  function GuidanceNC() {
+    return e(GuidanceSkill, { panelId: 'nonconformity-tracker',
+      purpose: '8-stage nonconformity lifecycle from detected to closed.',
+      citations: ['ISO/IEC 42001:2023, Clause 10.2', 'NIST AI RMF MANAGE 4.2'] });
+  }
+  function ArtifactsNC() {
+    var latest = latestFor('nonconformity');
+    if (!latest) return e(EmptyPanel, { message: 'No nonconformity records.' });
+    var records = latest.records || [];
+    var STAGES = ['detected', 'investigated', 'root-cause-identified', 'corrective-action-planned', 'corrective-action-in-progress', 'effectiveness-reviewed', 'verified', 'closed'];
+    var byStage = {};
+    STAGES.forEach(function(s) { byStage[s] = []; });
+    records.forEach(function(r) { var s = (r && (r.status || r.state)) || 'detected'; if (!byStage[s]) byStage[s] = []; byStage[s].push(r); });
+    return e('div', { 'data-panel': 'nonconformity' },
+      e('p', { className: 'text-dim text-sm mb-2' }, String(records.length) + ' records across 8 stages.'),
+      e('div', { className: 'grid grid-cols-4 gap-2' }, STAGES.map(function(s) {
+        return e('div', { key: s, className: 'card', style: { padding: 10 } },
+          e('div', { className: 'text-faint text-xs uppercase tracking-wide font-display mb-1' }, s.replace(/-/g, ' ')),
+          e('div', { className: 'font-display font-semibold text-md' }, String(byStage[s].length)),
+          byStage[s].slice(0, 3).map(function(r, i) {
+            return e('div', { key: i, className: 'text-xs text-dim truncate mt-1' }, r.id || r.title || '(no id)');
+          })
+        );
+      }))
+    );
+  }
+
+  function GuidanceIncident() {
+    return e(GuidanceSkill, { panelId: 'incident-reporting',
+      purpose: 'Regulatory-deadline-aware external incident reports per jurisdiction.',
+      citations: ['EU AI Act, Article 73', 'Colorado SB 205, Section 6-1-1703(7)'] });
+  }
+  function ArtifactsIncident() {
+    var latest = latestFor('incident-reporting');
+    if (!latest) return e(EmptyPanel, { message: 'No incident reports drafted.' });
+    var deadlines = latest.deadline_matrix || latest.deadlines || [];
+    var drafts = latest.reports || latest.drafts || [];
+    return e('div', { 'data-panel': 'incident-reporting' },
+      e('h3', { className: 'font-display text-sm mb-2' }, 'Deadline matrix'),
+      e(SimpleTable, { cols: [
+        { key: 'jurisdiction', label: 'Jurisdiction' },
+        { key: 'trigger', label: 'Trigger' },
+        { key: 'deadline', label: 'Deadline' },
+        { key: 'days_remaining', label: 'Days left', render: function(r) {
+          var d = r.days_remaining;
+          return e(Badge, { tone: d != null && d <= 2 ? 'danger' : d != null && d <= 7 ? 'warn' : 'ok' }, d == null ? '-' : String(d));
+        } },
+      ], rows: deadlines }),
+      e('h3', { className: 'font-display text-sm mt-4 mb-2' }, 'Per-jurisdiction drafts (' + drafts.length + ')'),
+      e('div', { className: 'grid grid-cols-2 gap-2' }, drafts.slice(0, 10).map(function(d, i) {
+        return e('div', { key: i, className: 'card', style: { padding: 12 } },
+          e('div', { className: 'font-display font-medium mb-1' }, d.jurisdiction || d.framework || 'Report ' + (i+1)),
+          e('div', { className: 'text-xs text-dim mono' }, (d.status || 'draft')),
+          e('div', { className: 'text-sm mt-1 text-dim' }, (d.summary || d.title || '').slice(0, 160))
+        );
+      }))
+    );
+  }
+
+  function GuidanceEUConform() {
+    return e(GuidanceSkill, { panelId: 'eu-conformity-assessor',
+      purpose: 'EU AI Act Article 43 procedure selection, Annex IV completeness, Article 17 QMS.',
+      citations: ['EU AI Act, Article 43', 'EU AI Act, Annex IV', 'EU AI Act, Article 17'] });
+  }
+  function ArtifactsEUConform() {
+    var latest = latestFor('eu-conformity-assessor');
+    if (!latest) return e(EmptyPanel, { message: 'No EU conformity assessment.' });
+    var procedure = latest.procedure || latest.assessment_procedure || '-';
+    var annex4 = latest.annex_iv_completeness || latest.annex_iv || [];
+    return e('div', { 'data-panel': 'conformity-assessment' },
+      e('div', { className: 'card mb-3' },
+        e('span', { className: 'text-faint text-xs uppercase tracking-wide font-display' }, 'Procedure'),
+        e('div', { className: 'mt-1' }, e(Badge, { tone: 'info' }, String(procedure)))
+      ),
+      e('h3', { className: 'font-display text-sm mb-2' }, 'Annex IV completeness'),
+      e(SimpleTable, { cols: [
+        { key: 'element', label: 'Element' },
+        { key: 'present', label: 'Present', render: function(r) { return e(Badge, { tone: r.present ? 'ok' : 'danger' }, r.present ? 'yes' : 'no'); } },
+        { key: 'evidence_ref', label: 'Evidence', mono: true },
+      ], rows: annex4 })
+    );
+  }
+
+  function GuidanceGPAI() {
+    return e(GuidanceSkill, { panelId: 'gpai-obligations-tracker',
+      purpose: 'EU AI Act Articles 53, 54, 55 obligations for GPAI providers.',
+      citations: ['EU AI Act, Article 51', 'EU AI Act, Article 53', 'EU AI Act, Article 55'] });
+  }
+  function ArtifactsGPAI() {
+    var latest = latestFor('gpai-obligations-tracker');
+    if (!latest) return e(EmptyPanel, { message: 'No GPAI obligations record.' });
+    var classification = latest.systemic_risk_classification || latest.classification || 'not-systemic';
+    var art53 = latest.article_53 || [];
+    var art54 = latest.article_54 || [];
+    var art55 = latest.article_55 || [];
+    function block(label, rows) {
+      return e('div', { className: 'card mb-2', style: { padding: 12 } },
+        e('div', { className: 'font-display font-medium mb-2' }, label, ' ',
+          e(Badge, { tone: '' }, String(rows.length) + ' checks')),
+        e(SimpleTable, { cols: [
+          { key: 'requirement', label: 'Requirement' },
+          { key: 'status', label: 'Status', render: function(r) { return e(Badge, { tone: r.status === 'met' ? 'ok' : r.status === 'gap' ? 'danger' : 'warn' }, r.status || '-'); } },
+        ], rows: rows, max: 20 })
+      );
+    }
+    return e('div', { 'data-panel': 'gpai' },
+      e('div', { className: 'card mb-3' },
+        e('span', { className: 'text-faint text-xs uppercase tracking-wide font-display' }, 'Systemic-risk classification'),
+        e('div', { className: 'mt-1' }, e(Badge, { tone: classification === 'systemic-risk' ? 'danger' : 'ok' }, String(classification)))
+      ),
+      block('Article 53 (universal)', art53),
+      block('Article 54 (auth. rep.)', art54),
+      block('Article 55 (systemic-risk)', art55)
+    );
+  }
+
+  function GuidanceOversight() {
+    return e(GuidanceSkill, { panelId: 'human-oversight-designer',
+      purpose: 'EU AI Act Article 14 oversight design with ability coverage and override capability.',
+      citations: ['EU AI Act, Article 14', 'ISO/IEC 42001:2023, Annex A, Control A.9.2', 'NIST AI RMF MANAGE 2.3'] });
+  }
+  function ArtifactsOversight() {
+    var latest = latestFor('human-oversight-designer');
+    if (!latest) return e(EmptyPanel, { message: 'No human oversight design recorded.' });
+    var abilities = latest.ability_coverage || latest.abilities || [];
+    var override = latest.override_capability || latest.override || {};
+    var biometric = latest.biometric_dual_assignment;
+    return e('div', { 'data-panel': 'human-oversight' },
+      e('h3', { className: 'font-display text-sm mb-2' }, '5-ability coverage'),
+      e(SimpleTable, { cols: [
+        { key: 'ability', label: 'Ability' },
+        { key: 'status', label: 'Status', render: function(r) { return e(Badge, { tone: r.status === 'covered' ? 'ok' : r.status === 'partial' ? 'warn' : 'danger' }, r.status || '-'); } },
+        { key: 'mechanism', label: 'Mechanism' },
+      ], rows: abilities }),
+      e('div', { className: 'card mt-3', style: { padding: 12 } },
+        e('span', { className: 'text-faint text-xs uppercase tracking-wide font-display' }, 'Override capability'),
+        e('div', { className: 'mt-1' }, e(Badge, { tone: override.present ? 'ok' : 'danger' }, override.present ? 'present' : 'missing')),
+        override.mechanism ? e('div', { className: 'text-dim text-sm mt-1' }, override.mechanism) : null
+      ),
+      biometric != null ? e('div', { className: 'card mt-3', style: { padding: 12 } },
+        e('span', { className: 'text-faint text-xs uppercase tracking-wide font-display' }, 'Biometric dual-assignment (Article 14(5))'),
+        e('div', { className: 'mt-1' }, e(Badge, { tone: biometric === true || biometric === 'compliant' ? 'ok' : 'danger' }, String(biometric)))
+      ) : null
+    );
+  }
+
+  function GuidanceSupplier() {
+    return e(GuidanceSkill, { panelId: 'supplier-vendor-assessor',
+      purpose: 'Supplier and vendor assessment with independence check.',
+      citations: ['ISO/IEC 42001:2023, Annex A, Control A.10.1', 'EU AI Act, Article 25'] });
+  }
+  function ArtifactsSupplier() {
+    var latest = latestFor('supplier-vendor-assessor');
+    if (!latest) return e(EmptyPanel, { message: 'No supplier assessments.' });
+    var matrix = latest.assessment_matrix || latest.suppliers || [];
+    var indep = latest.independence_check || latest.independence || null;
+    return e('div', { 'data-panel': 'supplier' },
+      e('h3', { className: 'font-display text-sm mb-2' }, 'Assessment matrix (' + matrix.length + ')'),
+      e(SimpleTable, { cols: [
+        { key: 'supplier', label: 'Supplier' },
+        { key: 'role', label: 'Role' },
+        { key: 'risk_tier', label: 'Tier', render: function(r) { return e(Badge, { tone: r.risk_tier === 'high' ? 'danger' : r.risk_tier === 'medium' ? 'warn' : 'ok' }, r.risk_tier || '-'); } },
+        { key: 'assessment_date', label: 'Assessed', mono: true },
+      ], rows: matrix }),
+      indep ? e('div', { className: 'card mt-3', style: { padding: 12 } },
+        e('span', { className: 'text-faint text-xs uppercase tracking-wide font-display' }, 'Independence check'),
+        e('div', { className: 'mt-1' }, e(Badge, { tone: indep.status === 'pass' ? 'ok' : 'danger' }, indep.status || '-')),
+        indep.detail ? e('div', { className: 'text-dim text-sm mt-1' }, indep.detail) : null
+      ) : null
+    );
+  }
+
+  function GuidanceUkAtrs() {
+    return e(GuidanceSkill, { panelId: 'uk-atrs-recorder',
+      purpose: 'UK Algorithmic Transparency Recording Standard (Tier 1 + Tier 2) record.',
+      citations: ['UK ATRS v1.0'] });
+  }
+  function ArtifactsUkAtrs() {
+    var latest = latestFor('uk-atrs');
+    if (!latest) return e(EmptyPanel, { message: 'No UK ATRS records.' });
+    var t1 = latest.tier_1 || latest.tier1 || {};
+    var t2 = latest.tier_2 || latest.tier2 || {};
+    function section(label, obj) {
+      var entries = Object.keys(obj || {}).slice(0, 20);
+      return e('details', { className: 'card mb-2', style: { padding: 12 } },
+        e('summary', { className: 'font-display font-medium cursor-pointer' }, label, ' ',
+          e(Badge, { tone: entries.length > 0 ? 'ok' : 'warn' }, entries.length + ' fields')),
+        e('dl', { className: 'mt-2 text-sm' }, entries.map(function(k) {
+          var val = obj[k];
+          return e('div', { key: k, className: 'mb-1' },
+            e('dt', { className: 'text-faint text-xs uppercase tracking-wide font-display' }, k.replace(/_/g, ' ')),
+            e('dd', { className: 'text-dim' }, typeof val === 'string' ? val : JSON.stringify(val)));
+        }))
+      );
+    }
+    return e('div', { 'data-panel': 'uk-atrs' },
+      section('Tier 1 summary', t1),
+      section('Tier 2 sections', t2)
+    );
+  }
+
+  function GuidanceColorado() {
+    return e(GuidanceSkill, { panelId: 'colorado-ai-act-compliance',
+      purpose: 'Colorado SB 205 developer and deployer obligation matrix.',
+      citations: ['Colorado SB 205, Section 6-1-1702', 'Colorado SB 205, Section 6-1-1703'] });
+  }
+  function ArtifactsColorado() {
+    var latest = latestFor('colorado-ai-act');
+    if (!latest) return e(EmptyPanel, { message: 'No Colorado SB 205 compliance records.' });
+    var dev = latest.developer_obligations || [];
+    var dep = latest.deployer_obligations || [];
+    var safe = latest.safe_harbor || latest.safe_harbour || {};
+    function mx(label, rows) {
+      return e('div', { className: 'card mb-2', style: { padding: 12 } },
+        e('div', { className: 'font-display font-medium mb-2' }, label),
+        e(SimpleTable, { cols: [
+          { key: 'obligation', label: 'Obligation' },
+          { key: 'status', label: 'Status', render: function(r) { return e(Badge, { tone: r.status === 'met' ? 'ok' : 'danger' }, r.status || '-'); } },
+          { key: 'section', label: 'Section', mono: true },
+        ], rows: rows })
+      );
+    }
+    return e('div', { 'data-panel': 'colorado-ai-act' },
+      mx('Developer obligations', dev),
+      mx('Deployer obligations', dep),
+      e('div', { className: 'card', style: { padding: 12 } },
+        e('span', { className: 'text-faint text-xs uppercase tracking-wide font-display' }, 'Safe-harbor status'),
+        e('div', { className: 'mt-1' }, e(Badge, { tone: safe.eligible ? 'ok' : 'warn' }, safe.eligible ? 'eligible' : 'not eligible'))
+      )
+    );
+  }
+
+  function GuidanceNycLl144() {
+    return e(GuidanceSkill, { panelId: 'nyc-ll144-audit-packager',
+      purpose: 'NYC Local Law 144 bias audit public-disclosure bundle with impact ratios and 4/5ths visualization.',
+      citations: ['NYC LL144, Section 20-871', 'NYC LL144, Section 5-303'] });
+  }
+  function ArtifactsNycLl144() {
+    var latest = latestFor('nyc-ll144');
+    if (!latest) return e(EmptyPanel, { message: 'No NYC LL 144 audit packages.' });
+    var ratios = latest.impact_ratios || latest.ratios || [];
+    var notice = latest.candidate_notice || {};
+    return e('div', { 'data-panel': 'nyc-ll144' },
+      e('h3', { className: 'font-display text-sm mb-2' }, 'Impact ratio table'),
+      e(SimpleTable, { cols: [
+        { key: 'group', label: 'Group' },
+        { key: 'selection_rate', label: 'Selection rate', mono: true },
+        { key: 'impact_ratio', label: 'Impact ratio', mono: true },
+        { key: 'four_fifths', label: '4/5ths', render: function(r) {
+          var passes = (typeof r.impact_ratio === 'number' && r.impact_ratio >= 0.8) || r.four_fifths === 'pass';
+          return e(Badge, { tone: passes ? 'ok' : 'danger' }, passes ? 'pass' : 'fail');
+        } },
+      ], rows: ratios }),
+      e('div', { className: 'card mt-3', style: { padding: 12 } },
+        e('span', { className: 'text-faint text-xs uppercase tracking-wide font-display' }, 'Candidate notice'),
+        e('div', { className: 'mt-1' }, e(Badge, { tone: notice.posted ? 'ok' : 'danger' }, notice.posted ? 'posted' : 'not posted')),
+        notice.url ? e('div', { className: 'mono text-xs mt-1' }, String(notice.url)) : null
+      )
+    );
+  }
+
+  function GuidanceMagf() {
+    return e(GuidanceSkill, { panelId: 'singapore-magf-assessor',
+      purpose: 'Singapore MAGF 4-pillar assessment with MAS FEAT financial-services layering.',
+      citations: ['Singapore MAGF v2e', 'MAS FEAT Principles'] });
+  }
+  function ArtifactsMagf() {
+    var latest = latestFor('singapore-magf-assessor');
+    if (!latest) return e(EmptyPanel, { message: 'No MAGF assessments.' });
+    var pillars = latest.pillars || [];
+    var feat = latest.feat || latest.mas_feat;
+    return e('div', { 'data-panel': 'singapore-magf' },
+      e('div', { className: 'grid grid-cols-4 gap-2 mb-3' }, pillars.slice(0, 4).map(function(p, i) {
+        return e('div', { key: i, className: 'tile' },
+          e('span', { className: 'count ' + (p.score === 'mature' ? 'ok' : p.score === 'developing' ? 'warn' : 'danger') }, String(p.score || '-')),
+          e('span', { className: 'label' }, p.name || ('Pillar ' + (i+1)))
+        );
+      })),
+      feat ? e('div', { className: 'card', style: { padding: 12 } },
+        e('span', { className: 'text-faint text-xs uppercase tracking-wide font-display' }, 'MAS FEAT (financial services)'),
+        e(SimpleTable, { cols: [
+          { key: 'principle', label: 'Principle' },
+          { key: 'status', label: 'Status', render: function(r) { return e(Badge, { tone: r.status === 'met' ? 'ok' : 'danger' }, r.status || '-'); } },
+        ], rows: Array.isArray(feat) ? feat : (feat.principles || []) })
+      ) : null
+    );
+  }
+
+  function GuidanceExplain() {
+    return e(GuidanceSkill, { panelId: 'explainability-documenter',
+      purpose: 'Explainability methods coverage matrix and EU AI Act Article 86 readiness.',
+      citations: ['NIST AI RMF MEASURE 2.9', 'EU AI Act, Article 86', 'ISO/IEC 42001:2023, Annex A, Control A.8.2'] });
+  }
+  function ArtifactsExplain() {
+    var latest = latestFor('explainability-documenter');
+    if (!latest) return e(EmptyPanel, { message: 'No explainability docs.' });
+    var coverage = latest.methods_coverage || latest.coverage || [];
+    var art86 = latest.article_86_readiness || latest.art86 || null;
+    return e('div', { 'data-panel': 'explainability' },
+      e('h3', { className: 'font-display text-sm mb-2' }, 'Methods coverage matrix'),
+      e(SimpleTable, { cols: [
+        { key: 'scope', label: 'Scope' },
+        { key: 'method', label: 'Method' },
+        { key: 'audience', label: 'Audience' },
+        { key: 'status', label: 'Status', render: function(r) { return e(Badge, { tone: r.status === 'present' ? 'ok' : 'danger' }, r.status || '-'); } },
+      ], rows: coverage }),
+      art86 != null ? e('div', { className: 'card mt-3', style: { padding: 12 } },
+        e('span', { className: 'text-faint text-xs uppercase tracking-wide font-display' }, 'EU AI Act Article 86 readiness'),
+        e('div', { className: 'mt-1' }, e(Badge, { tone: art86 === 'ready' || art86 === true ? 'ok' : 'warn' }, String(art86)))
+      ) : null
+    );
+  }
+
+  function GuidanceEventLog() {
+    return e(GuidanceSkill, { panelId: 'system-event-logger',
+      purpose: 'Event schema, retention policy, tamper-evidence per EU AI Act Article 12/19.',
+      citations: ['EU AI Act, Article 12', 'EU AI Act, Article 19', 'ISO/IEC 42001:2023, Annex A, Control A.6.2.8'] });
+  }
+  function ArtifactsEventLog() {
+    var latest = latestFor('system-event-logger');
+    if (!latest) return e(EmptyPanel, { message: 'No system event log schema recorded.' });
+    var schema = latest.event_schema || latest.schema || [];
+    var retention = latest.retention_policy || latest.retention || {};
+    var tamper = latest.tamper_evidence || latest.tamper || null;
+    return e('div', { 'data-panel': 'system-event-log' },
+      e('h3', { className: 'font-display text-sm mb-2' }, 'Event schema'),
+      e(SimpleTable, { cols: [
+        { key: 'field', label: 'Field', mono: true },
+        { key: 'type', label: 'Type' },
+        { key: 'required', label: 'Required', render: function(r) { return e(Badge, { tone: r.required ? 'accent' : '' }, r.required ? 'yes' : 'no'); } },
+        { key: 'description', label: 'Description' },
+      ], rows: schema }),
+      e('div', { className: 'card mt-3', style: { padding: 12 } },
+        e('span', { className: 'text-faint text-xs uppercase tracking-wide font-display' }, 'Retention policy'),
+        e('div', { className: 'mt-1 text-dim text-sm' },
+          'Minimum: ' + String(retention.minimum_months || retention.min || '-') + ' months'),
+        retention.maximum_months ? e('div', { className: 'text-dim text-sm' }, 'Maximum: ' + retention.maximum_months + ' months') : null
+      ),
+      tamper != null ? e('div', { className: 'card mt-2', style: { padding: 12 } },
+        e('span', { className: 'text-faint text-xs uppercase tracking-wide font-display' }, 'Tamper evidence'),
+        e('div', { className: 'mt-1' }, e(Badge, { tone: tamper === true || tamper === 'enabled' ? 'ok' : 'warn' }, String(tamper)))
+      ) : null
+    );
+  }
+
+  function GuidanceGenai() {
+    return e(GuidanceSkill, { panelId: 'genai-risk-register',
+      purpose: 'NIST AI 600-1 GenAI Profile 12-risk register with inherent and residual scoring.',
+      citations: ['NIST AI 600-1 (July 2024)', 'EU AI Act, Article 50', 'EU AI Act, Article 55'] });
+  }
+  function ArtifactsGenai() {
+    var latest = latestFor('genai-risk-register');
+    if (!latest) return e(EmptyPanel, { message: 'No GenAI risk register recorded.' });
+    var risks = latest.risks || latest.rows || [];
+    return e('div', { 'data-panel': 'genai-risk' },
+      e('p', { className: 'text-dim text-sm mb-2' }, String(risks.length) + ' of 12 GenAI risks evaluated.'),
+      e(SimpleTable, { cols: [
+        { key: 'risk_id', label: 'ID', mono: true },
+        { key: 'name', label: 'Risk' },
+        { key: 'inherent_score', label: 'Inherent', mono: true },
+        { key: 'residual_score', label: 'Residual', mono: true },
+        { key: 'escalated', label: 'Escalation', render: function(r) { return e(Badge, { tone: r.escalated ? 'danger' : 'ok' }, r.escalated ? 'flagged' : 'ok'); } },
+      ], rows: risks, max: 20 })
+    );
+  }
+
+  function GuidanceDataReg() {
+    return e(GuidanceSkill, { panelId: 'data-register-builder',
+      purpose: 'Data register per ISO 42001 A.7 and EU AI Act Article 10 (datasets, provenance, retention).',
+      citations: ['ISO/IEC 42001:2023, Annex A, Control A.7.1', 'EU AI Act, Article 10'] });
+  }
+  function ArtifactsDataReg() {
+    var latest = latestFor('data-register-builder');
+    if (!latest) return e(EmptyPanel, { message: 'No data register entries.' });
+    var datasets = latest.datasets || latest.rows || [];
+    return e('div', { 'data-panel': 'data-register' },
+      e('p', { className: 'text-dim text-sm mb-2' }, String(datasets.length) + ' datasets registered.'),
+      e(SimpleTable, { cols: [
+        { key: 'dataset_id', label: 'ID', mono: true },
+        { key: 'name', label: 'Name' },
+        { key: 'provenance', label: 'Provenance' },
+        { key: 'retention', label: 'Retention', mono: true },
+        { key: 'lawful_basis', label: 'Lawful basis' },
+      ], rows: datasets })
+    );
+  }
+
+  function GuidanceCrosswalkMatrix() {
+    return e(GuidanceSkill, { panelId: 'crosswalk-matrix-builder',
+      purpose: 'Cross-framework coverage matrix and query results.',
+      citations: ['See crosswalk browser for full graph'] });
+  }
+  function ArtifactsCrosswalkMatrix() {
+    var latest = latestFor('crosswalk-matrix-builder');
+    var cw = DATA.crosswalk || { mappings: [] };
+    if (!latest && (cw.mappings || []).length === 0) return e(EmptyPanel, { message: 'No crosswalk matrix queries recorded.' });
+    var query = latest && (latest.query || latest.parameters) || {};
+    var results = (latest && (latest.results || latest.rows)) || cw.mappings.slice(0, 40);
+    return e('div', { 'data-panel': 'crosswalk-matrix' },
+      Object.keys(query).length > 0 ? e('div', { className: 'card mb-3', style: { padding: 12 } },
+        e('span', { className: 'text-faint text-xs uppercase tracking-wide font-display' }, 'Query'),
+        e('pre', { className: 'mono text-xs mt-1' }, JSON.stringify(query, null, 2))
+      ) : null,
+      e(SimpleTable, { cols: [
+        { key: 'source_fw', label: 'Source' },
+        { key: 'source_ref', label: 'Source ref', mono: true },
+        { key: 'target_fw', label: 'Target' },
+        { key: 'target_ref', label: 'Target ref', mono: true },
+        { key: 'relationship', label: 'Relationship' },
+      ], rows: results, max: 100 })
+    );
+  }
+
+  function GuidanceHighRisk() {
+    return e(GuidanceSkill, { panelId: 'high-risk-classifier',
+      purpose: 'EU AI Act risk-tier classification per Articles 5, 6 and Annex I/III.',
+      citations: ['EU AI Act, Article 5', 'EU AI Act, Article 6', 'EU AI Act, Annex I', 'EU AI Act, Annex III'] });
+  }
+  function ArtifactsHighRisk() {
+    var latest = latestFor('classification');
+    if (!latest) return e(EmptyPanel, { message: 'No classification artifacts.' });
+    var systems = latest.systems || latest.rows || [latest];
+    return e('div', { 'data-panel': 'high-risk-classifier' },
+      e(SimpleTable, { cols: [
+        { key: 'system_id', label: 'System', mono: true },
+        { key: 'tier', label: 'Tier', render: function(r) { var t = r.tier || r.risk_tier; return e(Badge, { tone: t === 'prohibited' ? 'danger' : t === 'high' ? 'danger' : t === 'limited' ? 'warn' : 'ok' }, t || '-'); } },
+        { key: 'annex', label: 'Annex', render: function(r) { return r.annex ? e(Badge, { tone: 'info' }, r.annex) : '-'; } },
+        { key: 'justification', label: 'Justification' },
+      ], rows: systems })
+    );
+  }
+
+  // ------------------------------------------------------------------
+  // Panel factory map. Each entry is a triple of React components.
+  // ------------------------------------------------------------------
+
+  var PANEL_FACTORIES = {
+    'framework-monitor':             { Guidance: GuidanceRegFeed,       Artifacts: ArtifactsRegFeed,       storeKey: 'framework-monitor' },
+    'applicability-checker':         { Guidance: GuidanceApplicability, Artifacts: ArtifactsApplicability, storeKey: 'applicability-checker' },
+    'gap-explorer':                  { Guidance: GuidanceGapExplorer,   Artifacts: ArtifactsGapExplorer,   storeKey: 'gap-assessment' },
+    'citation-search':               { Guidance: GuidanceCitationSearch,Artifacts: ArtifactsCitationSearch,storeKey: null },
+    'ai-system-inventory-maintainer':{ Guidance: GuidanceAISystems,     Artifacts: ArtifactsAISystems,     storeKey: 'ai-system-inventory-maintainer' },
+    'aisia-runner':                  { Guidance: GuidanceAISIA,         Artifacts: ArtifactsAISIA,         storeKey: 'aisia' },
+    'audit-log-generator':           { Guidance: GuidanceAuditLog,      Artifacts: ArtifactsAuditLog,      storeKey: 'audit-log-generator' },
+    'metrics-collector':             { Guidance: GuidanceMetrics,       Artifacts: ArtifactsMetrics,       storeKey: 'metrics' },
+    'post-market-monitoring':        { Guidance: GuidancePMM,           Artifacts: ArtifactsPMM,           storeKey: 'post-market-monitoring' },
+    'robustness-evaluator':          { Guidance: GuidanceRobustness,    Artifacts: ArtifactsRobustness,    storeKey: 'robustness-evaluator' },
+    'bias-evaluator':                { Guidance: GuidanceBias,          Artifacts: ArtifactsBias,          storeKey: 'bias-evaluator' },
+    'evidence-bundle-packager':      { Guidance: GuidanceBundle,        Artifacts: ArtifactsBundle,        storeKey: 'evidence-bundle-packager' },
+    'certification-readiness':       { Guidance: GuidanceCertReady,     Artifacts: ArtifactsCertReady,     storeKey: 'certification-readiness' },
+    'management-review-packager':    { Guidance: GuidanceMgmtReview,    Artifacts: ArtifactsMgmtReview,    storeKey: 'management-review-packager' },
+    'internal-audit-planner':        { Guidance: GuidanceAuditPlan,     Artifacts: ArtifactsAuditPlan,     storeKey: 'internal-audit-planner' },
+    'role-matrix-generator':         { Guidance: GuidanceRoleMatrix,    Artifacts: ArtifactsRoleMatrix,    storeKey: 'role-matrix-generator' },
+    'nonconformity-tracker':         { Guidance: GuidanceNC,            Artifacts: ArtifactsNC,            storeKey: 'nonconformity' },
+    'incident-reporting':            { Guidance: GuidanceIncident,      Artifacts: ArtifactsIncident,      storeKey: 'incident-reporting' },
+    'eu-conformity-assessor':        { Guidance: GuidanceEUConform,     Artifacts: ArtifactsEUConform,     storeKey: 'eu-conformity-assessor' },
+    'gpai-obligations-tracker':      { Guidance: GuidanceGPAI,          Artifacts: ArtifactsGPAI,          storeKey: 'gpai-obligations-tracker' },
+    'human-oversight-designer':      { Guidance: GuidanceOversight,     Artifacts: ArtifactsOversight,     storeKey: 'human-oversight-designer' },
+    'supplier-vendor-assessor':      { Guidance: GuidanceSupplier,      Artifacts: ArtifactsSupplier,      storeKey: 'supplier-vendor-assessor' },
+    'uk-atrs-recorder':              { Guidance: GuidanceUkAtrs,        Artifacts: ArtifactsUkAtrs,        storeKey: 'uk-atrs' },
+    'colorado-ai-act-compliance':    { Guidance: GuidanceColorado,      Artifacts: ArtifactsColorado,      storeKey: 'colorado-ai-act' },
+    'nyc-ll144-audit-packager':      { Guidance: GuidanceNycLl144,      Artifacts: ArtifactsNycLl144,      storeKey: 'nyc-ll144' },
+    'singapore-magf-assessor':       { Guidance: GuidanceMagf,          Artifacts: ArtifactsMagf,          storeKey: 'singapore-magf-assessor' },
+    'explainability-documenter':     { Guidance: GuidanceExplain,       Artifacts: ArtifactsExplain,       storeKey: 'explainability-documenter' },
+    'system-event-logger':           { Guidance: GuidanceEventLog,      Artifacts: ArtifactsEventLog,      storeKey: 'system-event-logger' },
+    'genai-risk-register':           { Guidance: GuidanceGenai,         Artifacts: ArtifactsGenai,         storeKey: 'genai-risk-register' },
+    'data-register-builder':         { Guidance: GuidanceDataReg,       Artifacts: ArtifactsDataReg,       storeKey: 'data-register-builder' },
+    'crosswalk-matrix-builder':      { Guidance: GuidanceCrosswalkMatrix,Artifacts: ArtifactsCrosswalkMatrix, storeKey: 'crosswalk-matrix-builder' },
+    'high-risk-classifier':          { Guidance: GuidanceHighRisk,      Artifacts: ArtifactsHighRisk,      storeKey: 'classification' },
+  };
+
   function EvidenceQuickAction(props) {
     return e('div', { className: 'mt-4' },
       e(Button, {
@@ -1383,10 +2387,30 @@ APP_JS = r"""
       );
     }
 
-    // Generic fallback: all other panels render ThreeTabWorkspace with generic content.
+    // Bespoke renderer triples for every non-specially-handled panel.
+    var factory = PANEL_FACTORIES[id];
+    if (factory) {
+      return e('div', null,
+        e(PanelHeader, { crumbs: crumbs, title: title, desc: desc }),
+        e(Card, { panelId: id },
+          e(ThreeTabWorkspace, {
+            guidance:   e(factory.Guidance, null),
+            artifacts:  e('div', null, e(factory.Artifacts, null), e(EvidenceQuickAction, null)),
+            validation: factory.storeKey
+              ? e(ValidationFromWarnings, { storeKey: factory.storeKey })
+              : e(Alert, { tone: 'ok' }, 'Client-side panel. No server-side warnings apply.'),
+          })
+        )
+      );
+    }
+
+    // True fallback: only reached for unknown panel ids. Surfaces the issue
+    // so new panels added to the catalogue but missing from PANEL_FACTORIES
+    // are visible rather than silently rendering a placeholder.
     return e('div', null,
       e(PanelHeader, { crumbs: crumbs, title: title, desc: desc }),
       e(Card, { panelId: id },
+        e(Alert, { tone: 'warn' }, 'Unregistered panel id: ' + id + '. Add a factory entry in PANEL_FACTORIES.'),
         e(ThreeTabWorkspace, {
           guidance:   e(Guidance, { panelId: id }),
           artifacts:  e('div', null, e(ArtifactsGeneric, { panelId: id }), e(EvidenceQuickAction, null)),

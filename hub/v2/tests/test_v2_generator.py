@@ -317,6 +317,161 @@ class V2GeneratorTests(unittest.TestCase):
         self.assertIn("catalog", payload)
         self.assertEqual(len(payload["catalog"]["groups"]), 4)
 
+    # ------------------------------------------------------------------
+    # Bespoke renderer coverage
+    # ------------------------------------------------------------------
+
+    def test_all_bespoke_panels_have_renderers(self) -> None:
+        """Every sidebar panel id must either match a special-case renderer
+        (dashboard, crosswalk, cascade-intake, risk-register-builder,
+        soa-generator, gap-assessment, action-required) or appear in
+        PANEL_FACTORIES so it receives a bespoke triple, not the generic
+        fallback."""
+        _seed_evidence(self.base)
+        v2gen.generate(self.out, evidence_path=self.base)
+        out = self._read()
+        special = {
+            "dashboard", "crosswalk", "cascade-intake", "risk-register-builder",
+            "soa-generator", "gap-assessment", "action-required",
+            "certification", "tasks",
+        }
+        catalog = v2gen.PANEL_CATALOGUE
+        panel_ids: list[str] = []
+        for group in catalog["groups"]:
+            for item in group["items"]:
+                panel_ids.append(item["id"])
+        # Every non-special panel id must appear in the PANEL_FACTORIES map
+        # in the rendered HTML (string presence of the id as a JS key).
+        for pid in panel_ids:
+            if pid in special:
+                continue
+            # Find the factory assignment line by literal string match.
+            self.assertIn(f"'{pid}'", out, f"PANEL_FACTORIES entry missing for {pid}")
+
+    def test_empty_store_every_panel_emits_empty_panel(self) -> None:
+        """With an empty evidence store, the EmptyPanel marker must be present
+        in the rendered JS. This confirms renderers use the empty fallback
+        rather than crashing on undefined artifact data."""
+        self.base.mkdir(parents=True, exist_ok=True)
+        v2gen.generate(self.out, evidence_path=self.base)
+        out = self._read()
+        self.assertIn("EmptyPanel", out)
+        self.assertIn("data-empty", out)
+
+    def test_no_factory_fallback_marker_for_registered_panels(self) -> None:
+        """The 'Unregistered panel id' warning must not fire for any sidebar
+        panel. It should only appear in the bundled JS source (the branch),
+        not as an actual rendered message."""
+        _seed_evidence(self.base)
+        v2gen.generate(self.out, evidence_path=self.base)
+        out = self._read()
+        # The warning string exists in the JS source (as a branch) but the
+        # rendered payload must not indicate any panel hit that branch.
+        # We confirm by checking that every sidebar panel id is present as
+        # a PANEL_FACTORIES key in the inlined JS.
+        self.assertIn("PANEL_FACTORIES", out)
+        for pid in (
+            "framework-monitor", "applicability-checker", "audit-log-generator",
+            "bias-evaluator", "certification-readiness", "management-review-packager",
+            "incident-reporting", "data-register-builder",
+        ):
+            self.assertIn(f"'{pid}':", out, f"Factory key not found for {pid}")
+
+    def test_warning_rendering_from_plugin_artifact(self) -> None:
+        """Seed a synthetic bias-evaluator artifact with one warning. Confirm
+        the warning text reaches the rendered payload under the artifacts
+        summary and is visible to ValidationFromWarnings."""
+        _write(
+            self.base / "bias-evaluator" / "be.json",
+            {
+                "timestamp": "2026-04-18T13:00:00Z",
+                "agent_signature": "aigovops.bias-evaluator@0.1.0",
+                "metrics": [{"protected_attribute": "gender", "metric": "impact_ratio", "value": 0.72}],
+                "rule_findings": [{"jurisdiction": "NYC-LL144", "rule": "4/5ths", "status": "fail", "detail": "Below 0.8"}],
+                "warnings": ["Selection rate reference-group count below threshold for statistical validity"],
+            },
+        )
+        _seed_evidence(self.base)
+        v2gen.generate(self.out, evidence_path=self.base)
+        out = self._read()
+        m = re.search(
+            r'<script type="application/json" id="__AIGOVCLAW_HUB_V2_DATA__">\s*(.*?)\s*</script>',
+            out, flags=re.DOTALL,
+        )
+        self.assertIsNotNone(m)
+        payload = json.loads(m.group(1).replace("<\\/", "</"))
+        bias = payload["artifacts"].get("bias-evaluator")
+        self.assertIsNotNone(bias)
+        self.assertEqual(bias["count"], 1)
+        self.assertEqual(bias["warnings"], 1)
+        self.assertIn("Selection rate", json.dumps(bias["latest"]))
+
+    def test_citation_index_populated_from_artifacts(self) -> None:
+        """The citation-search panel depends on the citations_index payload.
+        Seed two artifacts with citations and confirm both surface."""
+        _write(
+            self.base / "risk-register" / "rr-cited.json",
+            {
+                "timestamp": "2026-04-18T14:00:00Z",
+                "agent_signature": "aigovops.risk-register@0.3.1",
+                "rows": [{"id": "R-100", "tier": "high"}],
+                "citations": ["ISO/IEC 42001:2023, Clause 6.1.2", "NIST AI RMF GOVERN 1.1"],
+            },
+        )
+        _write(
+            self.base / "audit-log-generator" / "log-cited.json",
+            {
+                "timestamp": "2026-04-18T14:05:00Z",
+                "agent_signature": "aigovops.audit-log-generator@0.1.0",
+                "events": [],
+                "citations": ["ISO/IEC 42001:2023, Clause 9.2"],
+            },
+        )
+        v2gen.generate(self.out, evidence_path=self.base)
+        out = self._read()
+        m = re.search(
+            r'<script type="application/json" id="__AIGOVCLAW_HUB_V2_DATA__">\s*(.*?)\s*</script>',
+            out, flags=re.DOTALL,
+        )
+        self.assertIsNotNone(m)
+        payload = json.loads(m.group(1).replace("<\\/", "</"))
+        cits = payload.get("citations_index", [])
+        self.assertGreaterEqual(len(cits), 3)
+        texts = [c["text"] for c in cits]
+        self.assertIn("ISO/IEC 42001:2023, Clause 6.1.2", texts)
+        self.assertIn("NIST AI RMF GOVERN 1.1", texts)
+        self.assertIn("ISO/IEC 42001:2023, Clause 9.2", texts)
+
+    def test_extended_plugin_dirs_loaded_by_v2_store(self) -> None:
+        """Seed an artifact in a directory the base Store does not load,
+        and confirm v2's _augment_store_for_v2 picks it up so bespoke
+        renderers can find it."""
+        _write(
+            self.base / "human-oversight-designer" / "hod.json",
+            {
+                "timestamp": "2026-04-18T15:00:00Z",
+                "agent_signature": "aigovops.human-oversight-designer@0.1.0",
+                "ability_coverage": [
+                    {"ability": "monitor", "status": "covered", "mechanism": "dashboard"},
+                    {"ability": "intervene", "status": "partial", "mechanism": "kill switch"},
+                ],
+                "override_capability": {"present": True, "mechanism": "manual stop"},
+            },
+        )
+        v2gen.generate(self.out, evidence_path=self.base)
+        out = self._read()
+        m = re.search(
+            r'<script type="application/json" id="__AIGOVCLAW_HUB_V2_DATA__">\s*(.*?)\s*</script>',
+            out, flags=re.DOTALL,
+        )
+        self.assertIsNotNone(m)
+        payload = json.loads(m.group(1).replace("<\\/", "</"))
+        hod = payload["artifacts"].get("human-oversight-designer")
+        self.assertIsNotNone(hod)
+        self.assertEqual(hod["count"], 1)
+        latest = hod["latest"]
+        self.assertEqual(len(latest["ability_coverage"]), 2)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -35,6 +35,7 @@ from ..generator import (
     _age_days,
     _count_by,
     _rel_from_base,
+    _walk_json,
 )
 from .templates import (
     APP_JS,
@@ -733,12 +734,100 @@ def _extract_action_required(store: Store) -> dict:
 # --------------------------------------------------------------------------
 
 
+# --------------------------------------------------------------------------
+# Extended plugin-keyed artifact loading for v2 bespoke renderers.
+# v2 renderers read from store.artifacts[<plugin-key>]. The base Store loads a
+# narrower set of ARTIFACT_DIRS for v0/v1 aggregate views. v2 augments the
+# store by walking each plugin directory under base/ so bespoke panels can
+# surface the latest artifact shape-for-shape. Absent directories remain empty.
+# --------------------------------------------------------------------------
+
+EXTENDED_PLUGIN_DIRS = (
+    "framework-monitor",
+    "applicability-checker",
+    "ai-system-inventory-maintainer",
+    "audit-log-generator",
+    "post-market-monitoring",
+    "robustness-evaluator",
+    "bias-evaluator",
+    "evidence-bundle-packager",
+    "certification-readiness",
+    "management-review-packager",
+    "internal-audit-planner",
+    "role-matrix-generator",
+    "incident-reporting",
+    "eu-conformity-assessor",
+    "gpai-obligations-tracker",
+    "human-oversight-designer",
+    "supplier-vendor-assessor",
+    "singapore-magf-assessor",
+    "explainability-documenter",
+    "system-event-logger",
+    "genai-risk-register",
+    "data-register-builder",
+    "crosswalk-matrix-builder",
+)
+
+
+def _augment_store_for_v2(store: Store) -> None:
+    """Load plugin-keyed directories that the base Store does not load."""
+    for key in EXTENDED_PLUGIN_DIRS:
+        if key in store.artifacts:
+            continue
+        store.artifacts[key] = list(_walk_json(store.base / key))
+
+
+def _summarize_artifacts(store: Store) -> dict:
+    """Compact per-plugin summary: latest artifact data and warning count."""
+    out: dict[str, dict] = {}
+    for key, arts in store.artifacts.items():
+        if not arts:
+            out[key] = {"count": 0, "warnings": 0, "latest": None}
+            continue
+        latest = arts[-1]
+        warn_count = 0
+        for a in arts:
+            w = a.data.get("warnings")
+            if isinstance(w, list):
+                warn_count += len(w)
+        out[key] = {
+            "count": len(arts),
+            "warnings": warn_count,
+            "latest": latest.data,
+        }
+    return out
+
+
+def _collect_citations(store: Store) -> list[dict]:
+    """Flatten all citations across every loaded artifact for citation-search."""
+    out: list[dict] = []
+    seen: set[tuple] = set()
+    for key, arts in store.artifacts.items():
+        for a in arts:
+            cits = a.data.get("citations")
+            if not isinstance(cits, list):
+                continue
+            for c in cits:
+                text = c if isinstance(c, str) else (c.get("text") or c.get("ref") if isinstance(c, dict) else None)
+                if not isinstance(text, str) or not text:
+                    continue
+                sig = (key, text)
+                if sig in seen:
+                    continue
+                seen.add(sig)
+                out.append({"source": key, "text": text})
+                if len(out) >= 2000:
+                    return out
+    return out
+
+
 def build_payload(
     store: Store,
     *,
     generated_at: str,
     aigovops_root: Path | None,
 ) -> dict:
+    _augment_store_for_v2(store)
     return {
         "generated_at": generated_at,
         "evidence_path": str(store.base),
@@ -751,6 +840,8 @@ def build_payload(
         "gap": _extract_gap(store),
         "action_required": _extract_action_required(store),
         "crosswalk": _extract_crosswalk(aigovops_root),
+        "artifacts": _summarize_artifacts(store),
+        "citations_index": _collect_citations(store),
     }
 
 
