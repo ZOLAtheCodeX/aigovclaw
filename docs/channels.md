@@ -69,11 +69,19 @@ We did NOT build our own Slack/Discord/Telegram bots, webhook servers, or messag
 - Plugin catalogue registration (`tools/aigovops_tools.py`)
 - Action-executor notification handler's stubbed channel arms — these currently raise `NotImplementedError` because the concrete delivery is Hermes Agent's responsibility. To wire them end-to-end, the notification handler should call the Hermes gateway's `deliver()` API rather than re-implementing delivery.
 
-## Stubbed notification handler channel arms
+## Notification handler routing (now wired)
 
-In `aigovclaw/action_executor/handlers/notification.py`, channels `slack`, `telegram`, `discord`, `email`, `desktop` currently raise `NotImplementedError`. They are preserved as stubs so a future wiring pass can route them to Hermes Agent's `gateway/delivery.py` rather than implement delivery here.
+`aigovclaw/action_executor/handlers/notification.py` routes `slack`, `telegram`, `discord`, `email`, `desktop` channels through Hermes Agent's gateway. Two routes, tried in order:
 
-The correct wiring is: `notification.handle()` checks for a Hermes gateway instance, and if present, calls `hermes.gateway.deliver(channel, message, severity)`. If Hermes is not running (e.g., standalone CLI mode), the handler falls back to `local-file` and `stdout` channels, which are fully implemented.
+1. **In-process** — if `hermes.gateway.delivery.deliver` is importable in the same Python environment (AIGovClaw running inside a Hermes Agent install), the handler calls it directly with `(channel, message, severity, source_plugin, request_id)`. Hermes then dispatches to the configured platform adapter (`gateway/platforms/slack.py`, etc.).
+
+2. **Out-of-process** — if env var `HERMES_API_URL` is set (pointing at Hermes's `api_server` gateway platform, e.g. `http://127.0.0.1:8765`), the handler POSTs to `{HERMES_API_URL}/gateway/deliver` with a JSON body. Optional `HERMES_API_TOKEN` env var for Bearer auth. 5-second timeout.
+
+3. **Unavailable** — if neither route is configured, the handler raises `NotImplementedError` with an actionable message pointing at docs/channels.md and suggesting the `local-file` or `stdout` fallback for local development.
+
+No silent fallback on Hermes channels. The operator explicitly chooses Hermes (via install or HERMES_API_URL) or explicitly uses a local channel.
+
+Dry-run mode reports which route would be used without attempting delivery (`result["delivery_route"]` in `{"hermes-inprocess", "hermes-http", "unavailable", "local"}`).
 
 ## Security note
 

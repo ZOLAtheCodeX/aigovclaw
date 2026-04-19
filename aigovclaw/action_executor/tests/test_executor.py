@@ -522,5 +522,106 @@ class TestConcurrency(ActionExecutorBaseCase):
         self.assertTrue(all(s == "executed" for s in statuses), statuses)
 
 
+class TestNotificationHermesRouting(unittest.TestCase):
+    """Verify notification handler routes Hermes channels correctly.
+
+    Three routes: hermes-inprocess (direct import), hermes-http (HTTPS to
+    api_server), unavailable (no Hermes configured). The handler must not
+    silently fall back when a Hermes channel is requested.
+    """
+
+    def setUp(self):
+        from aigovclaw.action_executor.handlers import notification
+        self.notification = notification
+        # Clean any env state that could leak between tests.
+        self._saved_env = {
+            k: os.environ.pop(k, None)
+            for k in ("HERMES_API_URL", "HERMES_API_TOKEN")
+        }
+
+    def tearDown(self):
+        for k, v in self._saved_env.items():
+            if v is not None:
+                os.environ[k] = v
+            else:
+                os.environ.pop(k, None)
+
+    def _make_request(self, channel="slack", message="hi"):
+        from aigovclaw.action_executor.action_registry import ActionRequest
+        from aigovclaw.action_executor.safety import new_request_id, utc_now_iso
+        return ActionRequest(
+            action_id="notification",
+            plugin="test",
+            target="user",
+            args={"channel": channel, "message": message, "severity": "info"},
+            rationale="test",
+            requested_at=utc_now_iso(),
+            request_id=new_request_id(),
+        )
+
+    def test_unavailable_route_raises_notimplementederror_with_actionable_message(self):
+        # No HERMES_API_URL, no hermes package importable (in this test env).
+        req = self._make_request(channel="slack")
+        with self.assertRaises(NotImplementedError) as ctx:
+            self.notification.handle(req, dry_run=False)
+        msg = str(ctx.exception)
+        self.assertIn("Hermes Agent", msg)
+        self.assertIn("HERMES_API_URL", msg)
+        self.assertIn("local-file", msg)  # fallback guidance
+
+    def test_dry_run_reports_route_without_delivering(self):
+        req = self._make_request(channel="telegram")
+        result = self.notification.handle(req, dry_run=True)
+        self.assertEqual(result["would_deliver_to"], "telegram")
+        self.assertIn(result["delivery_route"], ("hermes-inprocess", "hermes-http", "unavailable"))
+
+    def test_local_channels_unaffected_by_hermes_routing(self):
+        req_local = self._make_request(channel="local-file")
+        result = self.notification.handle(req_local, dry_run=False)
+        self.assertTrue(result.get("delivered"))
+        self.assertEqual(result["channel"], "local-file")
+
+    def test_http_route_attempts_request_when_env_set(self):
+        # Point at a port nothing listens on; expect RuntimeError with clear message.
+        os.environ["HERMES_API_URL"] = "http://127.0.0.1:1"  # unroutable
+        req = self._make_request(channel="discord")
+        with self.assertRaises(RuntimeError) as ctx:
+            self.notification.handle(req, dry_run=False)
+        self.assertIn("Hermes gateway", str(ctx.exception))
+
+    def test_inprocess_route_used_when_hermes_importable(self):
+        # Inject a fake hermes.gateway.delivery into sys.modules to prove the
+        # inprocess path is taken when available.
+        import types
+        fake_delivery = types.ModuleType("hermes.gateway.delivery")
+        calls = []
+        def fake_deliver(channel, message, severity, source_plugin=None, request_id=None):
+            calls.append({"channel": channel, "message": message, "severity": severity})
+            return {"delivered": True, "channel": channel, "platform_adapter": "fake"}
+        fake_delivery.deliver = fake_deliver
+        fake_gateway = types.ModuleType("hermes.gateway")
+        fake_gateway.delivery = fake_delivery
+        fake_hermes = types.ModuleType("hermes")
+        fake_hermes.gateway = fake_gateway
+
+        saved = {k: sys.modules.get(k) for k in ("hermes", "hermes.gateway", "hermes.gateway.delivery")}
+        sys.modules["hermes"] = fake_hermes
+        sys.modules["hermes.gateway"] = fake_gateway
+        sys.modules["hermes.gateway.delivery"] = fake_delivery
+        try:
+            req = self._make_request(channel="slack", message="hello")
+            result = self.notification.handle(req, dry_run=False)
+            self.assertEqual(result["route"], "hermes-inprocess")
+            self.assertEqual(result["channel"], "slack")
+            self.assertEqual(calls[0]["channel"], "slack")
+            self.assertEqual(calls[0]["message"], "hello")
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    sys.modules.pop(k, None)
+                else:
+                    sys.modules[k] = v
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
