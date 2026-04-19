@@ -39,6 +39,40 @@ When the richer interactive view is justified, hub v1 will use React, Tailwind,
 and shadcn/ui bundled via the `web-artifacts-builder` skill. That is a
 deliberate upgrade, not a default.
 
+## Versions
+
+| Capability | v0 | v1 | v2 |
+|---|---|---|---|
+| Single-file HTML artifact | yes | yes | yes |
+| Backend / server state | none | none | none |
+| Dependencies | stdlib only | vendored React 18 UMD | vendored React 18 UMD |
+| Aesthetic | deep slate + burnt orange, Crimson Pro + JetBrains Mono | same | deep slate-blue (AIGovOS) + burnt orange accent, Plus Jakarta Sans + Source Sans 3 + JetBrains Mono |
+| Sidebar IA | none | none | CASCADE / DISCOVERY / ASSURANCE / GOVERNANCE (AIGovOS port) |
+| Panel count | ~10 | ~10 | 30+ covering every AIGovOps plugin |
+| Jurisdiction filter | Global / USA / EU / UK | same | Global / USA / EU / UK / Singapore / Canada |
+| Three-tab workspace per panel (Guidance / Artifacts / Validation) | no | no | yes |
+| Cascade intake wizard | no | no | yes (writes `aigovclaw.hub.v2.profile` to localStorage) |
+| Crosswalk graph visualization | no | no | yes (inline SVG, data parsed from aigovops) |
+| Command palette (`/` shortcut) | no | basic | yes |
+| Action-required banner at top | panel | panel | sticky banner + panel |
+| Best for | archival, air-gapped | interactive composite view | daily practitioner workflow |
+
+All three versions read from the same `~/.hermes/memory/aigovclaw/` evidence
+store. v2 additionally reads crosswalk YAML from the adjacent `aigovops` repo
+when available.
+
+Commands:
+
+```bash
+python3 -m aigovclaw.hub.cli generate    --output dashboard.html       # v0
+python3 -m aigovclaw.hub.cli generate-v1 --output hub-v1.html          # v1
+python3 -m aigovclaw.hub.cli generate-v2 --output hub-v2.html          # v2
+```
+
+v1 and v2 require the React UMD files dropped into the respective
+`hub/v1/vendor/` and `hub/v2/vendor/` directories. Without them, the generator
+exits with code 2 and a maintainer-action message.
+
 ## Install
 
 No install step beyond the parent repository clone. The hub is pure stdlib.

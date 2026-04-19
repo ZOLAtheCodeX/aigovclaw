@@ -4,9 +4,12 @@ Usage:
   python3 -m aigovclaw.hub.cli generate    --output <path> [--evidence <path>]
   python3 -m aigovclaw.hub.cli serve       [--port 8080] [--host 127.0.0.1] [--evidence <path>]
   python3 -m aigovclaw.hub.cli generate-v1 --output <path> [--evidence <path>]
+  python3 -m aigovclaw.hub.cli generate-v2 --output <path> [--evidence <path>]
 
 The `generate` and `serve` subcommands produce v0 (zero-dependency single-file
-HTML). `generate-v1` delegates to hub.v1.cli and produces the React artifact.
+HTML). `generate-v1` delegates to hub.v1.cli and produces the React editorial
+artifact. `generate-v2` delegates to hub.v2.cli and produces the practitioner
+dashboard (AIGovOS IA ported onto AIGovOps plugin data).
 
 Stdlib only.
 """
@@ -138,6 +141,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     g1.set_defaults(func=_cmd_generate_v1)
 
+    # v2: practitioner dashboard with CASCADE / DISCOVERY / ASSURANCE / GOVERNANCE IA.
+    g2 = sub.add_parser(
+        "generate-v2",
+        help="Write the v2 practitioner dashboard single-file artifact.",
+    )
+    g2.add_argument("--output", "-o", required=True, help="Output HTML file path.")
+    g2.add_argument("--evidence", default=None, help="Override evidence store path.")
+    g2.add_argument(
+        "--aigovops-root",
+        default=None,
+        help="Path to the aigovops repo (for crosswalk data). Defaults to sibling checkout.",
+    )
+    g2.add_argument(
+        "--demo-dir",
+        default=None,
+        help="Reshape aigovops demo-scenario outputs before rendering.",
+    )
+    g2.set_defaults(func=_cmd_generate_v2)
+
     return p
 
 
@@ -145,6 +167,11 @@ def _cmd_generate_v1(args: argparse.Namespace) -> int:
     # Import lazily so the v0 CLI keeps working if hub.v1 is absent.
     from .v1.cli import _cmd_generate as v1_generate  # noqa: WPS433
     return v1_generate(args)
+
+
+def _cmd_generate_v2(args: argparse.Namespace) -> int:
+    from .v2.cli import _cmd_generate as v2_generate  # noqa: WPS433
+    return v2_generate(args)
 
 
 def main(argv: list[str] | None = None) -> int:
