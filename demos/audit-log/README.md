@@ -28,7 +28,7 @@ python demos/audit-log/run.py
 
 Expected output on success:
 
-```
+```text
 system_name:     ClaimsTriageAI-v1
 agent_signature: audit-log-generator/0.2.0
 annex_a:         ['A.6.2.3', 'A.6.2.8', 'A.3.2', 'A.5.4', 'A.6.2.4', 'A.6.2.6', 'A.7.2', 'A.7.5', 'A.5.5', 'A.8.3']
@@ -44,6 +44,7 @@ The input lives at [input.json](input.json). It describes `ClaimsTriageAI-v1`, a
 ## Output structure
 
 `demos/audit-log/output/<system_name>-<timestamp>.json` contains:
+
 - `timestamp`: ISO 8601 UTC timestamp of workflow completion.
 - `system_name`: echoed from input.
 - `clause_mappings`: list of canonical ISO 42001 main-body clause citations in STYLE.md format.

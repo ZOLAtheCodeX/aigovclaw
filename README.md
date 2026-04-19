@@ -11,7 +11,7 @@ See the [audit-log demo](demos/audit-log/README.md) for an end-to-end example: i
 
 ## Architecture at a glance
 
-```
+```text
 +-----------------------------------------------------------------------+
 |                         Operator surfaces                             |
 |   Hub v2 UI | Hub v2 HTTP API | CLI | Slack | Discord | Telegram      |
