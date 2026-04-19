@@ -31,3 +31,11 @@ jules/archive/**
 # Hub generator output
 hub/output/
 
+
+# Demo outputs: the current set under demos/*/output/ is committed as a
+# reference of what the last known good run produced. Subsequent local
+# runs write new timestamped files alongside those; keep them out of
+# git status so the working tree stays quiet.
+demos/*/output/*
+!demos/*/output/
+!demos/*/output/.keep

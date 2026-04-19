@@ -1,0 +1,24 @@
+{
+  "system_name": "ClaimsTriageAI-v1",
+  "purpose": "Triage inbound health insurance claims to prioritize high-urgency clinical cases for human adjuster review. Does not approve, deny, or adjust claim amounts; produces an ordered queue only.",
+  "risk_tier": "high",
+  "data_processed": [
+    "personal health information",
+    "patient demographics",
+    "claim narrative text",
+    "diagnostic codes (ICD-10)",
+    "procedure codes (CPT)"
+  ],
+  "deployment_context": "Production clinical-operations environment at a regional health insurance carrier. Integrated into the claims adjuster queue; adjusters always make the final determination.",
+  "governance_decisions": [
+    "Approved continued production deployment following the 2026-Q1 model performance review.",
+    "Recorded disparate outcomes in the minors subpopulation; scheduled Clause 6.1.4 AISIA refresh for 2026-Q2.",
+    "Accepted remediation plan: adjuster-training module update and subpopulation-specific fairness metric added to the monitoring dashboard."
+  ],
+  "responsible_parties": [
+    "Chief Data Officer (accountable)",
+    "Head of Claims Operations (responsible)",
+    "AI Governance Lead (consulted)",
+    "Privacy Officer (informed)"
+  ]
+}

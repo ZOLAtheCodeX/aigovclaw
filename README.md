@@ -3,9 +3,63 @@
 
 # AIGovClaw
 
-**AIGovOps running as an autonomous governance agent. Powered by Hermes Agent.**
+**Local-first AI governance runtime for audit-grade artifact production.**
 
-AIGovClaw is the runtime configuration package for AIGovOps. Clone this repository, run the installer, and you have a working AI governance operations agent on your machine. The agent loads the [aigovops](https://github.com/ZOLAtheCodeX/aigovops) skills catalogue and operates against AI governance frameworks (NIST AI RMF, ISO/IEC 42001, EU AI Act, and others).
+AIGovClaw is the Hermes Agent runtime configuration package for AIGovOps. Clone this repository, run the installer, and you have a working local agent that takes an AI system description and produces audit-grade artifacts: ISO/IEC 42001 audit log entries, NIST AI RMF gap assessments, risk registers, and AI System Impact Assessments. Every output is acceptable as audit evidence, every consequential action is approved or declined by the operator, and every decision leaves a traceable audit entry.
+
+See the [audit-log demo](demos/audit-log/README.md) for an end-to-end example: input fixture, exact command, captured JSON and Markdown output, and replayable test.
+
+## Architecture at a glance
+
+```
++-----------------------------------------------------------------------+
+|                         Operator surfaces                             |
+|   Hub v2 UI | Hub v2 HTTP API | CLI | Slack | Discord | Telegram      |
++-----------------------------------+-----------------------------------+
+                                    |
+                                    v                    TaskEnvelope
++-----------------------------------------------------------------------+
+|                         Hermes Agent runtime                          |
+|         gateway/platforms/*  |  tool registry  |  persona             |
++-----------------------------------+-----------------------------------+
+                                    |
+                                    v                    ActionRequest
++-----------------------------------------------------------------------+
+|                        AIGovClaw domain layer                         |
+|   action_executor  |  agent_loop (PDCA)  |  workflows/  |  audit log  |
++-----------------------------------+-----------------------------------+
+                                    |
+                                    v                    plugin invocation
++-----------------------------------------------------------------------+
+|                      AIGovOps plugin catalogue                        |
+|   audit-log-generator | gap-assessment | risk-register | aisia | ...  |
++-----------------------------------+-----------------------------------+
+                                    |
+                                    v
+                          Local memory and evidence store
+                        ~/.hermes/memory/aigovclaw/
+```
+
+Four layers, four responsibilities. Hermes Agent handles channels, session ingress, and tool registration. AIGovClaw is the domain layer: workflow semantics, action authority, audit trail, evidence production. AIGovOps is the framework-agnostic plugin catalogue (skills, plugins, bundles, evals). The local memory store holds audit evidence, approvals, and action snapshots under four named classes; see [docs/memory-model.md](docs/memory-model.md).
+
+## Status
+
+| Layer | State |
+|---|---|
+| Hermes gateway and channels | Works. 18 upstream adapters inherited; notification handler wired through `hermes.gateway.delivery.deliver` in-process and via `HERMES_API_URL` out-of-process. |
+| Action executor (6 action types, authority policy, audit trail, snapshot and rollback, rate limiting) | Works. 27 tests pass. |
+| Task envelope schema (`aigovclaw.task_envelope`) | Works. 9 tests pass. Wired to Hub v2 `/api/tasks` ingress in a follow-up commit. |
+| Audit event schema (`aigovclaw.action_executor.audit_event`) | Works. 7 tests pass. Legacy flat writer retained for backward compatibility. |
+| Risk-tier classification on the action registry | Works. Every action carries an explicit tier; surfaced in audit intent and pending-approval output. |
+| PDCA agent loop (gap-resolution, cascade, validation) | Works. Orchestrator + gap-resolution tests pass. |
+| Hub v2 Command Centre (HTTP API, task queue, approvals, PDCA routes) | Works. Generator, server, and route tests pass. |
+| AIGovOps plugin catalogue | Works, dependent on `aigovops` sibling repo. 32 plugins and 24 skills registered via `tools/aigovops_tools.py`. |
+| Audit-log workflow end-to-end demo | Works. See [demos/audit-log/](demos/audit-log/). |
+| gap-assessment, risk-register, aisia-runner workflows end-to-end demos | Planned. Underlying plugins ship with tests; integration demos tracked as follow-up work. |
+| HMAC audit-event signing | Works when `AIGOVCLAW_AUDIT_SIGNING_KEY` is set. Signing-key provisioning process is not yet production hardened. |
+| Approval UI in Command Centre chat surfaces | Works for Hub v2 UI. Channel-based reply approval (Slack and friends) is planned. |
+
+See the [operational action layer](AGENTS.md#8-operational-action-layer) for the enforced contracts.
 
 ## Three-step install
 
