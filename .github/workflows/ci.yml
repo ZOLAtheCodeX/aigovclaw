@@ -65,6 +65,35 @@ jobs:
       - name: Run MCP router tests
         run: python3 adapters/mcp/tests/test_router.py
 
+  pytest-suite:
+    name: Pytest full suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout aigovclaw
+        uses: actions/checkout@v4
+        with:
+          path: aigovclaw
+
+      - name: Checkout aigovops alongside
+        uses: actions/checkout@v4
+        with:
+          repository: ZOLAtheCodeX/aigovops
+          path: aigovops
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install pytest pyyaml
+
+      - name: Run pytest
+        working-directory: aigovclaw
+        env:
+          AIGOVOPS_PLUGINS_PATH: ${{ github.workspace }}/aigovops/plugins
+        run: python -m pytest -v --tb=short
+
   install-smoke-test:
     name: install.sh dry-run smoke test
     runs-on: ubuntu-latest
