@@ -16,6 +16,8 @@ so they do not collide.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import importlib
 import threading
 from pathlib import Path
@@ -44,6 +46,16 @@ from .safety import (
 
 class ActionValidationError(ValueError):
     """Raised when an ActionRequest is structurally invalid or targets unknown action."""
+
+
+
+@dataclass
+class ActionContext:
+    request: ActionRequest
+    spec: ActionSpec
+    mode: str
+    intent_audit_id: str
+    started: str
 
 
 class ActionExecutor:
@@ -156,9 +168,9 @@ class ActionExecutor:
         })
 
         if resolution.mode == AUTHORITY_ASK and not request.dry_run:
-            return self._enqueue_for_approval(request, spec, resolution.mode, intent_id, started)
+            return self._enqueue_for_approval(ActionContext(request, spec, resolution.mode, intent_id, started))
 
-        return self._run_handler(request, spec, resolution.mode, intent_id, started)
+        return self._run_handler(ActionContext(request, spec, resolution.mode, intent_id, started))
 
     def approve(self, request_id: str, *, approver: str = "operator") -> ActionResult:
         """Unblock a queued request and run it through the handler."""
@@ -189,7 +201,7 @@ class ActionExecutor:
         with self._lock:
             self._pending.pop(request_id, None)
 
-        return self._run_handler(request, spec, AUTHORITY_ASK, record["intent_audit_id"], started)
+        return self._run_handler(ActionContext(request, spec, AUTHORITY_ASK, record["intent_audit_id"], started))
 
     def reject(self, request_id: str, reason: str, *, approver: str = "operator") -> ActionResult:
         """Mark a pending request as rejected. Never invokes the handler."""
@@ -279,44 +291,41 @@ class ActionExecutor:
 
     def _enqueue_for_approval(
         self,
-        request: ActionRequest,
-        spec: ActionSpec,
-        mode: str,
-        intent_audit_id: str,
-        started: str,
+        context: ActionContext,
     ) -> ActionResult:
         queued_at = utc_now_iso()
         record = {
-            "request_id": request.request_id,
-            "request": request,
-            "intent_audit_id": intent_audit_id,
+            "request_id": context.request.request_id,
+            "request": context.request,
+            "intent_audit_id": context.intent_audit_id,
             "queued_at": queued_at,
             "decision": None,
             "decided_by": None,
             "reason": None,
         }
         with self._lock:
-            self._pending[request.request_id] = record
+            self._pending[context.request.request_id] = record
         self._persist_pending(record)
         return ActionResult(
-            request_id=request.request_id,
+            request_id=context.request.request_id,
             status="approved-pending",
-            authority_mode_used=mode,
-            audit_entry_id=intent_audit_id,
+            authority_mode_used=context.mode,
+            audit_entry_id=context.intent_audit_id,
             rollback_snapshot_path=None,
-            started_at=started,
+            started_at=context.started,
             ended_at=utc_now_iso(),
             output={"queued_at": queued_at},
         )
 
     def _run_handler(
         self,
-        request: ActionRequest,
-        spec: ActionSpec,
-        mode: str,
-        intent_audit_id: str,
-        started: str,
+        context: ActionContext,
     ) -> ActionResult:
+        request = context.request
+        spec = context.spec
+        mode = context.mode
+        intent_audit_id = context.intent_audit_id
+        started = context.started
         if request.dry_run:
             try:
                 handler = importlib.import_module(spec.handler_module)
