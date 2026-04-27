@@ -27,6 +27,7 @@ import importlib.util
 import json
 import os
 import sys
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -75,23 +76,8 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def main() -> int:
-    sys.path.insert(0, str(REPO_ROOT))
+def _build_envelope(envelope_id: str, inputs: dict) -> "TaskEnvelope":
     from aigovclaw.task_envelope import TaskEnvelope
-    from aigovclaw.action_executor.audit_event import (
-        AuditEvent,
-        EVENT_WORKFLOW_COMPLETED,
-        EVENT_WORKFLOW_FAILED,
-        EVENT_WORKFLOW_STARTED,
-    )
-    from aigovclaw.action_executor.safety import new_request_id
-
-    input_path = DEMO_DIR / "input.json"
-    if not input_path.exists():
-        raise SystemExit(f"Missing input fixture: {input_path}")
-    inputs = json.loads(input_path.read_text(encoding="utf-8"))
-
-    envelope_id = new_request_id()
     envelope = TaskEnvelope(
         envelope_id=envelope_id,
         command="gap-assessment",
@@ -105,7 +91,12 @@ def main() -> int:
         metadata={"demo_fixture": "demos/gap-assessment/input.json"},
     )
     envelope.validate()
+    return envelope
 
+
+def _create_start_event(envelope_id: str, args: dict) -> "AuditEvent":
+    from aigovclaw.action_executor.audit_event import AuditEvent, EVENT_WORKFLOW_STARTED
+    from aigovclaw.action_executor.safety import new_request_id
     workflow_start = AuditEvent(
         event=EVENT_WORKFLOW_STARTED,
         timestamp=_utc_now_iso(),
@@ -113,57 +104,48 @@ def main() -> int:
         request_id=envelope_id,
         plugin="gap-assessment",
         action="re-run-plugin",
-        target=envelope.args.get("target_framework", ""),
+        target=args.get("target_framework", ""),
         payload={
-            "envelope_source": envelope.source_type,
+            "envelope_source": "cli",
             "workflow": "gap-assessment",
-            "scope_boundary": envelope.args.get("scope_boundary", ""),
+            "scope_boundary": args.get("scope_boundary", ""),
         },
     )
     workflow_start.validate()
+    return workflow_start
 
-    plugin_path = _locate_plugin()
-    plugin = _import_plugin(plugin_path)
 
-    try:
-        assessment = plugin.generate_gap_assessment(envelope.args)
-        markdown = plugin.render_markdown(assessment)
-        csv_text = plugin.render_csv(assessment)
-    except Exception as exc:
-        failure = AuditEvent(
-            event=EVENT_WORKFLOW_FAILED,
-            timestamp=_utc_now_iso(),
-            audit_entry_id=new_request_id(),
-            request_id=envelope_id,
-            plugin="gap-assessment",
-            action="re-run-plugin",
-            target=envelope.args.get("target_framework", ""),
-            payload={"error": f"{type(exc).__name__}: {exc}"},
-        )
-        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        with (OUTPUT_DIR / "audit-events.jsonl").open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(workflow_start.to_dict()) + "\n")
-            fh.write(json.dumps(failure.to_dict()) + "\n")
-        print(f"FAILED: {exc}", file=sys.stderr)
-        return 1
+def _create_failure_event(envelope_id: str, args: dict, exc: Exception) -> "AuditEvent":
+    from aigovclaw.action_executor.audit_event import AuditEvent, EVENT_WORKFLOW_FAILED
+    from aigovclaw.action_executor.safety import new_request_id
+    failure = AuditEvent(
+        event=EVENT_WORKFLOW_FAILED,
+        timestamp=_utc_now_iso(),
+        audit_entry_id=new_request_id(),
+        request_id=envelope_id,
+        plugin="gap-assessment",
+        action="re-run-plugin",
+        target=args.get("target_framework", ""),
+        payload={"error": f"{type(exc).__name__}: {exc}"},
+    )
+    return failure
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    timestamp = assessment.get("timestamp", _utc_now_iso()).replace(":", "-")
-    framework = assessment.get("target_framework", "unknown")
-    out_json = OUTPUT_DIR / f"{framework}-{timestamp}.json"
-    out_md = OUTPUT_DIR / f"{framework}-{timestamp}.md"
-    out_csv = OUTPUT_DIR / f"{framework}-{timestamp}.csv"
-    out_json.write_text(json.dumps(assessment, indent=2) + "\n", encoding="utf-8")
-    out_md.write_text(markdown, encoding="utf-8")
-    out_csv.write_text(csv_text, encoding="utf-8")
 
-    classifications = [row.get("classification") for row in assessment.get("rows", [])]
-    summary = assessment.get("summary") or {}
-    counts = summary.get("classification_counts") or {
-        c: classifications.count(c) for c in set(classifications)
-    }
-    coverage_score = summary.get("coverage_score")
+@dataclass
+class CompletionStats:
+    """Statistics for the completed gap assessment."""
+    row_count: int
+    classification_counts: dict
+    coverage_score: str | None
+    agent_signature: str | None
 
+
+def _create_completed_event(
+    envelope_id: str, framework: str, out_paths: tuple[Path, Path, Path], stats: CompletionStats
+) -> "AuditEvent":
+    from aigovclaw.action_executor.audit_event import AuditEvent, EVENT_WORKFLOW_COMPLETED
+    from aigovclaw.action_executor.safety import new_request_id
+    out_json, out_md, out_csv = out_paths
     completed = AuditEvent(
         event=EVENT_WORKFLOW_COMPLETED,
         timestamp=_utc_now_iso(),
@@ -176,28 +158,123 @@ def main() -> int:
             "output_json": str(out_json.relative_to(REPO_ROOT)),
             "output_markdown": str(out_md.relative_to(REPO_ROOT)),
             "output_csv": str(out_csv.relative_to(REPO_ROOT)),
-            "row_count": len(classifications),
-            "classification_counts": counts,
-            "coverage_score": coverage_score,
-            "agent_signature": assessment.get("agent_signature"),
+            "row_count": stats.row_count,
+            "classification_counts": stats.classification_counts,
+            "coverage_score": stats.coverage_score,
+            "agent_signature": stats.agent_signature,
         },
     )
     completed.validate()
+    return completed
 
+
+def _persist_outputs(assessment: dict, markdown: str, csv_text: str) -> tuple[Path, Path, Path]:
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = assessment.get("timestamp", _utc_now_iso()).replace(":", "-")
+    framework = assessment.get("target_framework", "unknown")
+    out_json = OUTPUT_DIR / f"{framework}-{timestamp}.json"
+    out_md = OUTPUT_DIR / f"{framework}-{timestamp}.md"
+    out_csv = OUTPUT_DIR / f"{framework}-{timestamp}.csv"
+    out_json.write_text(json.dumps(assessment, indent=2) + "\n", encoding="utf-8")
+    out_md.write_text(markdown, encoding="utf-8")
+    out_csv.write_text(csv_text, encoding="utf-8")
+    return out_json, out_md, out_csv
+
+
+def _calculate_stats(assessment: dict) -> CompletionStats:
+    classifications = [row.get("classification") for row in assessment.get("rows", [])]
+    summary = assessment.get("summary") or {}
+    counts = summary.get("classification_counts") or {
+        c: classifications.count(c) for c in set(classifications)
+    }
+    return CompletionStats(
+        row_count=len(classifications),
+        classification_counts=counts,
+        coverage_score=summary.get("coverage_score"),
+        agent_signature=assessment.get("agent_signature"),
+    )
+
+
+def _log_workflow_failure(
+    workflow_start: "AuditEvent", failure: "AuditEvent", exc: Exception
+) -> int:
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     with (OUTPUT_DIR / "audit-events.jsonl").open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(workflow_start.to_dict()) + "\n")
-        fh.write(json.dumps(completed.to_dict()) + "\n")
+        fh.write(json.dumps(failure.to_dict()) + "\n")
+    print(f"FAILED: {exc}", file=sys.stderr)
+    return 1
 
+
+def _print_summary(
+    framework: str, stats: CompletionStats, out_paths: tuple[Path, Path, Path]
+) -> None:
+    out_json, out_md, out_csv = out_paths
     print(f"framework:            {framework}")
-    print(f"agent_signature:      {assessment.get('agent_signature')}")
-    print(f"rows:                 {len(classifications)}")
-    print(f"classification_counts: {counts}")
-    print(f"coverage_score:       {coverage_score}")
+    print(f"agent_signature:      {stats.agent_signature}")
+    print(f"rows:                 {stats.row_count}")
+    print(f"classification_counts: {stats.classification_counts}")
+    print(f"coverage_score:       {stats.coverage_score}")
     print(f"json:                 {out_json.relative_to(REPO_ROOT)}")
     print(f"markdown:             {out_md.relative_to(REPO_ROOT)}")
     print(f"csv:                  {out_csv.relative_to(REPO_ROOT)}")
     print(f"audit events:         {(OUTPUT_DIR / 'audit-events.jsonl').relative_to(REPO_ROOT)}")
+
+
+def _process_workflow(envelope: "TaskEnvelope") -> tuple[dict, str, str] | Exception:
+    plugin_path = _locate_plugin()
+    plugin = _import_plugin(plugin_path)
+
+    try:
+        assessment = plugin.generate_gap_assessment(envelope.args)
+        markdown = plugin.render_markdown(assessment)
+        csv_text = plugin.render_csv(assessment)
+        return assessment, markdown, csv_text
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        return exc
+
+
+def _log_events(workflow_start: "AuditEvent", completed: "AuditEvent") -> None:
+    with (OUTPUT_DIR / "audit-events.jsonl").open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(workflow_start.to_dict()) + "\n")
+        fh.write(json.dumps(completed.to_dict()) + "\n")
+
+
+def _run_workflow() -> int:
+    from aigovclaw.action_executor.safety import new_request_id
+
+    input_path = DEMO_DIR / "input.json"
+    if not input_path.exists():
+        raise SystemExit(f"Missing input fixture: {input_path}")
+    inputs = json.loads(input_path.read_text(encoding="utf-8"))
+
+    envelope_id = new_request_id()
+    envelope = _build_envelope(envelope_id, inputs)
+    workflow_start = _create_start_event(envelope_id, envelope.args)
+
+    result = _process_workflow(envelope)
+    if isinstance(result, Exception):
+        failure = _create_failure_event(envelope_id, envelope.args, result)
+        return _log_workflow_failure(workflow_start, failure, result)
+
+    assessment, markdown, csv_text = result
+
+    out_paths = _persist_outputs(assessment, markdown, csv_text)
+    stats = _calculate_stats(assessment)
+    framework = assessment.get("target_framework", "unknown")
+
+    completed = _create_completed_event(envelope_id, framework, out_paths, stats)
+
+    _log_events(workflow_start, completed)
+
+    _print_summary(framework, stats, out_paths)
     return 0
+
+
+def main() -> int:
+    """Run the gap-assessment end-to-end demo."""
+    sys.path.insert(0, str(REPO_ROOT))
+    return _run_workflow()
 
 
 if __name__ == "__main__":
