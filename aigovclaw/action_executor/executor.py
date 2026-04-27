@@ -309,57 +309,59 @@ class ActionExecutor:
             output={"queued_at": queued_at},
         )
 
-    def _run_handler(
+    def _handle_dry_run(
         self,
         request: ActionRequest,
         spec: ActionSpec,
         mode: str,
-        intent_audit_id: str,
         started: str,
     ) -> ActionResult:
-        if request.dry_run:
-            try:
-                handler = importlib.import_module(spec.handler_module)
-                output = handler.handle(request, dry_run=True)
-            except Exception as exc:
-                audit_id = self.audit.write({
-                    "event": "action-failed",
-                    "request_id": request.request_id,
-                    "plugin": request.plugin,
-                    "action": request.action_id,
-                    "dry_run": True,
-                    "error": f"{type(exc).__name__}: {exc}",
-                    "rollback_attempted": False,
-                })
-                return ActionResult(
-                    request_id=request.request_id,
-                    status="failed",
-                    authority_mode_used=mode,
-                    audit_entry_id=audit_id,
-                    rollback_snapshot_path=None,
-                    started_at=started,
-                    ended_at=utc_now_iso(),
-                    error=str(exc),
-                )
+        try:
+            handler = importlib.import_module(spec.handler_module)
+            output = handler.handle(request, dry_run=True)
+        except Exception as exc:
             audit_id = self.audit.write({
-                "event": "action-dry-run",
+                "event": "action-failed",
                 "request_id": request.request_id,
                 "plugin": request.plugin,
                 "action": request.action_id,
-                "output": output,
+                "dry_run": True,
+                "error": f"{type(exc).__name__}: {exc}",
+                "rollback_attempted": False,
             })
             return ActionResult(
                 request_id=request.request_id,
-                status="skipped-dry-run",
+                status="failed",
                 authority_mode_used=mode,
                 audit_entry_id=audit_id,
                 rollback_snapshot_path=None,
                 started_at=started,
                 ended_at=utc_now_iso(),
-                output=output,
+                error=str(exc),
             )
+        audit_id = self.audit.write({
+            "event": "action-dry-run",
+            "request_id": request.request_id,
+            "plugin": request.plugin,
+            "action": request.action_id,
+            "output": output,
+        })
+        return ActionResult(
+            request_id=request.request_id,
+            status="skipped-dry-run",
+            authority_mode_used=mode,
+            audit_entry_id=audit_id,
+            rollback_snapshot_path=None,
+            started_at=started,
+            ended_at=utc_now_iso(),
+            output=output,
+        )
 
-        # Snapshot when handler mutates local files.
+    def _take_snapshot(
+        self,
+        request: ActionRequest,
+        spec: ActionSpec,
+    ) -> tuple[Path | None, Path | None]:
         snapshot_dir: Path | None = None
         snapshot_target_path: Path | None = None
         if spec.id == "file-update":
@@ -377,6 +379,20 @@ class ActionExecutor:
                 snapshot_dir = snapshot_target(
                     self.memory_root, request.request_id, snapshot_target_path
                 )
+        return snapshot_dir, snapshot_target_path
+
+    def _run_handler(
+        self,
+        request: ActionRequest,
+        spec: ActionSpec,
+        mode: str,
+        intent_audit_id: str,
+        started: str,
+    ) -> ActionResult:
+        if request.dry_run:
+            return self._handle_dry_run(request, spec, mode, started)
+
+        snapshot_dir, snapshot_target_path = self._take_snapshot(request, spec)
 
         try:
             handler = importlib.import_module(spec.handler_module)
