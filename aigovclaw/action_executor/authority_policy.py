@@ -139,38 +139,42 @@ def _parse_yaml(text: str) -> Any:
         return _fallback_yaml(text)
 
 
-def _fallback_yaml(text: str) -> Any:
+class _FallbackYAMLParser:
     """Minimal YAML parser sufficient for authority-policy.yaml.
 
     Supports: nested mappings by indentation, lists of scalars or mappings,
     scalar values (strings, ints, bools, null), and line comments starting
     with #. No anchors, flow syntax, or multi-doc streams.
     """
-    lines: list[tuple[int, str]] = []
-    for raw in text.splitlines():
-        stripped = raw.split("#", 1)[0].rstrip()
-        if not stripped.strip():
-            continue
-        indent = len(stripped) - len(stripped.lstrip(" "))
-        lines.append((indent, stripped.lstrip(" ")))
 
-    idx = [0]
+    def __init__(self, text: str):
+        self.lines: list[tuple[int, str]] = []
+        for raw in text.splitlines():
+            stripped = raw.split("#", 1)[0].rstrip()
+            if not stripped.strip():
+                continue
+            indent = len(stripped) - len(stripped.lstrip(" "))
+            self.lines.append((indent, stripped.lstrip(" ")))
+        self.idx = 0
 
-    def parse_block(indent: int) -> Any:
+    def parse(self) -> Any:
+        return self._parse_block(0)
+
+    def _parse_block(self, indent: int) -> Any:
         # Decide whether this block is a mapping or a list based on first line.
-        if idx[0] >= len(lines):
+        if self.idx >= len(self.lines):
             return None
-        first_indent, first = lines[idx[0]]
+        first_indent, first = self.lines[self.idx]
         if first_indent < indent:
             return None
         if first.startswith("- "):
-            return parse_list(indent)
-        return parse_map(indent)
+            return self._parse_list(indent)
+        return self._parse_map(indent)
 
-    def parse_map(indent: int) -> dict[str, Any]:
+    def _parse_map(self, indent: int) -> dict[str, Any]:
         result: dict[str, Any] = {}
-        while idx[0] < len(lines):
-            cur_indent, cur = lines[idx[0]]
+        while self.idx < len(self.lines):
+            cur_indent, cur = self.lines[self.idx]
             if cur_indent < indent:
                 break
             if cur_indent > indent:
@@ -180,47 +184,47 @@ def _fallback_yaml(text: str) -> Any:
             key, _, value = cur.partition(":")
             key = key.strip()
             value = value.strip()
-            idx[0] += 1
+            self.idx += 1
             if value == "":
                 # Nested block
-                sub = parse_block(indent + 2) if idx[0] < len(lines) else None
+                sub = self._parse_block(indent + 2) if self.idx < len(self.lines) else None
                 result[key] = sub if sub is not None else {}
             else:
-                result[key] = _scalar(value)
+                result[key] = self._scalar(value)
         return result
 
-    def parse_list(indent: int) -> list[Any]:
+    def _parse_list(self, indent: int) -> list[Any]:
         result: list[Any] = []
-        while idx[0] < len(lines):
-            cur_indent, cur = lines[idx[0]]
+        while self.idx < len(self.lines):
+            cur_indent, cur = self.lines[self.idx]
             if cur_indent != indent or not cur.startswith("- "):
                 break
             rest = cur[2:].strip()
-            idx[0] += 1
+            self.idx += 1
             if rest == "":
-                sub = parse_block(indent + 2)
+                sub = self._parse_block(indent + 2)
                 result.append(sub if sub is not None else None)
                 continue
             if ":" in rest:
                 # Inline mapping entry: parse the first kv, then continue with
                 # same indent + 2 for additional keys.
                 key, _, value = rest.partition(":")
-                entry: dict[str, Any] = {key.strip(): _scalar(value.strip()) if value.strip() else None}
-                while idx[0] < len(lines):
-                    ni, nc = lines[idx[0]]
+                entry: dict[str, Any] = {key.strip(): self._scalar(value.strip()) if value.strip() else None}
+                while self.idx < len(self.lines):
+                    ni, nc = self.lines[self.idx]
                     if ni != indent + 2 or nc.startswith("- "):
                         break
                     if ":" not in nc:
                         break
                     k2, _, v2 = nc.partition(":")
-                    entry[k2.strip()] = _scalar(v2.strip())
-                    idx[0] += 1
+                    entry[k2.strip()] = self._scalar(v2.strip())
+                    self.idx += 1
                 result.append(entry)
             else:
-                result.append(_scalar(rest))
+                result.append(self._scalar(rest))
         return result
 
-    def _scalar(value: str) -> Any:
+    def _scalar(self, value: str) -> Any:
         if value == "" or value.lower() == "null" or value == "~":
             return None
         if value.lower() == "true":
@@ -231,7 +235,7 @@ def _fallback_yaml(text: str) -> Any:
             inner = value[1:-1].strip()
             if not inner:
                 return []
-            return [_scalar(x.strip()) for x in inner.split(",")]
+            return [self._scalar(x.strip()) for x in inner.split(",")]
         try:
             return int(value)
         except ValueError:
@@ -240,4 +244,6 @@ def _fallback_yaml(text: str) -> Any:
             return value[1:-1]
         return value
 
-    return parse_block(0)
+
+def _fallback_yaml(text: str) -> Any:
+    return _FallbackYAMLParser(text).parse()
