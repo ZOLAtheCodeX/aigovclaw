@@ -37,7 +37,7 @@ def _write(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
-def _seed(base: Path) -> None:
+def _seed_risk_register(base: Path) -> None:
     _write(
         base / "risk-register" / "2026-04-18.json",
         {
@@ -51,6 +51,9 @@ def _seed(base: Path) -> None:
             ],
         },
     )
+
+
+def _seed_soa(base: Path) -> None:
     _write(
         base / "soa" / "soa-2026-04-18.json",
         {
@@ -66,6 +69,9 @@ def _seed(base: Path) -> None:
             ],
         },
     )
+
+
+def _seed_aisia(base: Path) -> None:
     for i, (sid, state) in enumerate(
         [("sys-a", "complete"), ("sys-b", "gaps"), ("sys-c", "missing")]
     ):
@@ -78,6 +84,9 @@ def _seed(base: Path) -> None:
                 "AGENT_SIGNATURE": "aigovops.aisia@0.1.0",
             },
         )
+
+
+def _seed_nonconformity(base: Path) -> None:
     _write(
         base / "nonconformity" / "nc-001.json",
         {"id": "NC-001", "state": "open", "created_at": "2026-04-01T00:00:00Z",
@@ -93,6 +102,9 @@ def _seed(base: Path) -> None:
         {"id": "NC-003", "state": "closed", "created_at": "2026-03-01T00:00:00Z",
          "AGENT_SIGNATURE": "aigovops.nc@0.1.0"},
     )
+
+
+def _seed_metrics(base: Path) -> None:
     _write(
         base / "metrics" / "2026-04-18.json",
         {
@@ -105,6 +117,9 @@ def _seed(base: Path) -> None:
             ],
         },
     )
+
+
+def _seed_gap_assessment(base: Path) -> None:
     _write(
         base / "gap-assessment" / "iso.json",
         {"framework": "ISO-42001", "coverage_score": 72.0,
@@ -120,6 +135,9 @@ def _seed(base: Path) -> None:
         {"framework": "EU-AI-Act", "coverage_score": 58.0,
          "AGENT_SIGNATURE": "aigovops.gap@0.1.0"},
     )
+
+
+def _seed_classification(base: Path) -> None:
     for sid, tier in [
         ("clinical-triage", "high-risk-annex-iii"),
         ("social-score", "prohibited"),
@@ -133,6 +151,9 @@ def _seed(base: Path) -> None:
             {"system_id": sid, "risk_tier": tier,
              "AGENT_SIGNATURE": "aigovops.eu-classifier@0.2.0"},
         )
+
+
+def _seed_action_required(base: Path) -> None:
     _write(
         base / "action-required" / "review-hipaa.json",
         {
@@ -141,6 +162,17 @@ def _seed(base: Path) -> None:
             "AGENT_SIGNATURE": "aigovclaw.mcp-router@0.1.0",
         },
     )
+
+
+def _seed(base: Path) -> None:
+    _seed_risk_register(base)
+    _seed_soa(base)
+    _seed_aisia(base)
+    _seed_nonconformity(base)
+    _seed_metrics(base)
+    _seed_gap_assessment(base)
+    _seed_classification(base)
+    _seed_action_required(base)
 
 
 class HubGeneratorTests(unittest.TestCase):
@@ -371,7 +403,7 @@ class HubGeneratorTests(unittest.TestCase):
         html_out = self._read()
         # There must be a prefers-reduced-motion rule that disables the
         # panel transition added by the jurisdiction switcher.
-        m = re.search(
+        re.search(
             r"@media \(prefers-reduced-motion:\s*reduce\)\s*\{([^}]*\{[^}]*\}[^}]*)*\}",
             html_out,
             flags=re.DOTALL,
