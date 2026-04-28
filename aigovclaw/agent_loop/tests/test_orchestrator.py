@@ -603,6 +603,29 @@ class TestCascadeLoop(unittest.TestCase):
         loop.run()
         self.assertLessEqual(loop.actions_executed, 3)
 
+    def test_trigger_derivation_exception_handled_safely(self):
+        analyzer = StubCascadeAnalyzer({
+            "ev-0": {"flat_action_list": [
+                {"action_id": "x", "plugin": "y", "target": "t", "args": {}, "rationale": "r"},
+            ]}
+        })
+        exec_mock = MockActionExecutor()
+
+        def faulty_derive(_result):
+            raise ValueError("Intentional crash in trigger derivation")
+
+        loop = CascadeLoop(
+            trigger_event={"event": "ev-0", "source_plugin": "x"},
+            cascade_analyzer=analyzer,
+            action_executor=exec_mock,
+            trigger_derivation=faulty_derive,
+        )
+        # Should not raise exception
+        loop.run()
+
+        # Only the initial action should be executed, no derived actions
+        self.assertEqual(loop.actions_executed, 1)
+
 
 # ---------------------------------------------------------------------------
 # Validation loop tests.
