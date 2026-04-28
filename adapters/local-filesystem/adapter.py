@@ -50,14 +50,12 @@ def _classify_action(artifact: dict[str, Any]) -> str:
     if isinstance(warnings, list) and len(warnings) > 0:
         return "action-required-human"
     # Per-row warnings aggregated.
-    row_warnings = 0
     for key in ("rows", "records", "sections", "kpi_records"):
-        items = artifact.get(key) or []
-        for item in items:
-            if isinstance(item, dict) and item.get("warnings"):
-                row_warnings += len(item["warnings"])
-    if row_warnings > 0:
-        return "action-required-human"
+        items = artifact.get(key)
+        if items:
+            for item in items:
+                if isinstance(item, dict) and item.get("warnings"):
+                    return "action-required-human"
     # Low-confidence signals: draft agent_signature, small summary numbers, scaffold_rows present.
     if artifact.get("scaffold_rows") or artifact.get("scaffold_sections"):
         return "completed-autonomously-low-confidence"

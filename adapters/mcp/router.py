@@ -29,14 +29,16 @@ def _utc_now_iso() -> str:
 def _classify_action(artifact: dict[str, Any]) -> str:
     """Derive the action-item classification tag from warnings."""
     warnings = artifact.get("warnings") or []
-    row_warnings = 0
-    for key in ("rows", "records", "sections", "kpi_records"):
-        items = artifact.get(key) or []
-        for item in items:
-            if isinstance(item, dict) and item.get("warnings"):
-                row_warnings += len(item["warnings"])
-    if warnings or row_warnings > 0 or artifact.get("unassigned_rows"):
+    if warnings or artifact.get("unassigned_rows"):
         return "action-required-human"
+
+    for key in ("rows", "records", "sections", "kpi_records"):
+        items = artifact.get(key)
+        if items:
+            for item in items:
+                if isinstance(item, dict) and item.get("warnings"):
+                    return "action-required-human"
+
     if artifact.get("scaffold_rows") or artifact.get("scaffold_sections"):
         return "completed-autonomously-low-confidence"
     return "completed-autonomously-high-confidence"
