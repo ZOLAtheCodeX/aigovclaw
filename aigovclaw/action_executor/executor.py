@@ -19,6 +19,7 @@ from __future__ import annotations
 import importlib
 import threading
 from pathlib import Path
+from dataclasses import dataclass
 from typing import Any
 
 from .action_registry import (
@@ -40,6 +41,16 @@ from .safety import (
     snapshot_target,
     utc_now_iso,
 )
+
+
+@dataclass
+class ActionContext:
+    """Encapsulates the context required to execute or queue an action."""
+    request: ActionRequest
+    spec: ActionSpec
+    mode: str
+    intent_audit_id: str
+    started: str
 
 
 class ActionValidationError(ValueError):
@@ -155,10 +166,18 @@ class ActionExecutor:
             "rationale": request.rationale,
         })
 
-        if resolution.mode == AUTHORITY_ASK and not request.dry_run:
-            return self._enqueue_for_approval(request, spec, resolution.mode, intent_id, started)
+        context = ActionContext(
+            request=request,
+            spec=spec,
+            mode=resolution.mode,
+            intent_audit_id=intent_id,
+            started=started,
+        )
 
-        return self._run_handler(request, spec, resolution.mode, intent_id, started)
+        if resolution.mode == AUTHORITY_ASK and not request.dry_run:
+            return self._enqueue_for_approval(context)
+
+        return self._run_handler(context)
 
     def approve(self, request_id: str, *, approver: str = "operator") -> ActionResult:
         """Unblock a queued request and run it through the handler."""
@@ -189,7 +208,15 @@ class ActionExecutor:
         with self._lock:
             self._pending.pop(request_id, None)
 
-        return self._run_handler(request, spec, AUTHORITY_ASK, record["intent_audit_id"], started)
+        context = ActionContext(
+            request=request,
+            spec=spec,
+            mode=AUTHORITY_ASK,
+            intent_audit_id=record["intent_audit_id"],
+            started=started,
+        )
+
+        return self._run_handler(context)
 
     def reject(self, request_id: str, reason: str, *, approver: str = "operator") -> ActionResult:
         """Mark a pending request as rejected. Never invokes the handler."""
@@ -279,44 +306,40 @@ class ActionExecutor:
 
     def _enqueue_for_approval(
         self,
-        request: ActionRequest,
-        spec: ActionSpec,
-        mode: str,
-        intent_audit_id: str,
-        started: str,
+        context: ActionContext,
     ) -> ActionResult:
         queued_at = utc_now_iso()
         record = {
-            "request_id": request.request_id,
-            "request": request,
-            "intent_audit_id": intent_audit_id,
+            "request_id": context.request.request_id,
+            "request": context.request,
+            "intent_audit_id": context.intent_audit_id,
             "queued_at": queued_at,
             "decision": None,
             "decided_by": None,
             "reason": None,
         }
         with self._lock:
-            self._pending[request.request_id] = record
+            self._pending[context.request.request_id] = record
         self._persist_pending(record)
         return ActionResult(
-            request_id=request.request_id,
+            request_id=context.request.request_id,
             status="approved-pending",
-            authority_mode_used=mode,
-            audit_entry_id=intent_audit_id,
+            authority_mode_used=context.mode,
+            audit_entry_id=context.intent_audit_id,
             rollback_snapshot_path=None,
-            started_at=started,
+            started_at=context.started,
             ended_at=utc_now_iso(),
             output={"queued_at": queued_at},
         )
 
     def _run_handler(
         self,
-        request: ActionRequest,
-        spec: ActionSpec,
-        mode: str,
-        intent_audit_id: str,
-        started: str,
+        context: ActionContext,
     ) -> ActionResult:
+        request = context.request
+        spec = context.spec
+        intent_audit_id = context.intent_audit_id
+
         if request.dry_run:
             try:
                 handler = importlib.import_module(spec.handler_module)
@@ -334,10 +357,10 @@ class ActionExecutor:
                 return ActionResult(
                     request_id=request.request_id,
                     status="failed",
-                    authority_mode_used=mode,
+                    authority_mode_used=context.mode,
                     audit_entry_id=audit_id,
                     rollback_snapshot_path=None,
-                    started_at=started,
+                    started_at=context.started,
                     ended_at=utc_now_iso(),
                     error=str(exc),
                 )
@@ -351,10 +374,10 @@ class ActionExecutor:
             return ActionResult(
                 request_id=request.request_id,
                 status="skipped-dry-run",
-                authority_mode_used=mode,
+                authority_mode_used=context.mode,
                 audit_entry_id=audit_id,
                 rollback_snapshot_path=None,
-                started_at=started,
+                started_at=context.started,
                 ended_at=utc_now_iso(),
                 output=output,
             )
@@ -401,10 +424,10 @@ class ActionExecutor:
             return ActionResult(
                 request_id=request.request_id,
                 status=status,
-                authority_mode_used=mode,
+                authority_mode_used=context.mode,
                 audit_entry_id=audit_id,
                 rollback_snapshot_path=str(snapshot_dir) if snapshot_dir else None,
-                started_at=started,
+                started_at=context.started,
                 ended_at=utc_now_iso(),
                 error=str(exc),
             )
@@ -421,10 +444,10 @@ class ActionExecutor:
         return ActionResult(
             request_id=request.request_id,
             status="executed",
-            authority_mode_used=mode,
+            authority_mode_used=context.mode,
             audit_entry_id=audit_id,
             rollback_snapshot_path=str(snapshot_dir) if snapshot_dir else None,
-            started_at=started,
+            started_at=context.started,
             ended_at=utc_now_iso(),
             output=output,
         )

@@ -464,7 +464,7 @@ class TestOtherHandlers(ActionExecutorBaseCase):
             args={"plugin_name": "audit-log-generator", "inputs": inputs},
         )
         result = ex.execute(req)
-        if result.status == "failed":
+        if result.status in ("failed", "rolled-back") and result.error and "aigovops checkout not found" in result.error:
             # aigovops checkout not found in this environment; skip rather than fail.
             self.skipTest(f"aigovops unavailable: {result.error}")
         self.assertEqual(result.status, "executed")
