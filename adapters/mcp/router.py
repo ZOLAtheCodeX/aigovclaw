@@ -16,10 +16,19 @@ artifact type optionally mapping to multiple MCP tools in parallel.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
 ROUTER_VERSION = "0.1.0"
+
+
+@dataclass
+class InvocationContext:
+    artifact_type: str
+    parent_artifact_type: str | None
+    timestamp: str
+    action_tag: str
 
 
 def _utc_now_iso() -> str:
@@ -160,10 +169,12 @@ class MCPRouter:
                     invocations.append(self._build_invocation(
                         source=row,
                         route=route,
-                        artifact_type=row_type,
-                        parent_artifact_type=artifact_type,
-                        timestamp=timestamp,
-                        action_tag=_classify_action(row) if row.get("warnings") else action_tag,
+                        context=InvocationContext(
+                            artifact_type=row_type,
+                            parent_artifact_type=artifact_type,
+                            timestamp=timestamp,
+                            action_tag=_classify_action(row) if row.get("warnings") else action_tag,
+                        ),
                     ))
             # Also allow routes targeting the whole-document (multi-row) artifact
             # type, which pushes one page representing the full register.
@@ -172,10 +183,12 @@ class MCPRouter:
                 invocations.append(self._build_invocation(
                     source=artifact,
                     route=route,
-                    artifact_type=artifact_type,
-                    parent_artifact_type=None,
-                    timestamp=timestamp,
-                    action_tag=action_tag,
+                    context=InvocationContext(
+                        artifact_type=artifact_type,
+                        parent_artifact_type=None,
+                        timestamp=timestamp,
+                        action_tag=action_tag,
+                    ),
                 ))
         else:
             # Single-artifact: one invocation per route.
@@ -184,10 +197,12 @@ class MCPRouter:
                 invocations.append(self._build_invocation(
                     source=artifact,
                     route=route,
-                    artifact_type=artifact_type,
-                    parent_artifact_type=None,
-                    timestamp=timestamp,
-                    action_tag=action_tag,
+                    context=InvocationContext(
+                        artifact_type=artifact_type,
+                        parent_artifact_type=None,
+                        timestamp=timestamp,
+                        action_tag=action_tag,
+                    ),
                 ))
 
         status = "ok" if invocations else "no-config"
@@ -204,10 +219,7 @@ class MCPRouter:
         self,
         source: dict[str, Any],
         route: dict[str, Any],
-        artifact_type: str,
-        parent_artifact_type: str | None,
-        timestamp: str,
-        action_tag: str,
+        context: InvocationContext,
     ) -> dict[str, Any]:
         arguments = dict(route.get("arguments") or {})
         if route.get("property_mapping"):
@@ -225,10 +237,10 @@ class MCPRouter:
             "mcp_server": route["mcp_server"],
             "tool_name": route["tool_name"],
             "arguments": arguments,
-            "action_tag": action_tag,
-            "source_artifact_type": artifact_type,
-            "parent_artifact_type": parent_artifact_type,
-            "timestamp": timestamp,
+            "action_tag": context.action_tag,
+            "source_artifact_type": context.artifact_type,
+            "parent_artifact_type": context.parent_artifact_type,
+            "timestamp": context.timestamp,
             "router_version": ROUTER_VERSION,
         }
 
