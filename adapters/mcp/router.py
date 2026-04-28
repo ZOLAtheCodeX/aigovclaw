@@ -155,16 +155,78 @@ class MCPRouter:
             row_type = _row_to_artifact_type(artifact_type)
             row_routes = self.routes.get(row_type) or self.routes.get(artifact_type, [])
             rows = artifact.get(_rows_key(artifact_type)) or []
-            for row in rows:
+
+            if rows and row_routes:
+                row_action_tags = [
+                    _classify_action(row) if row.get("warnings") else action_tag
+                    for row in rows
+                ]
+
+                processed_routes = []
                 for route in row_routes:
-                    invocations.append(self._build_invocation(
-                        source=row,
-                        route=route,
-                        artifact_type=row_type,
-                        parent_artifact_type=artifact_type,
-                        timestamp=timestamp,
-                        action_tag=_classify_action(row) if row.get("warnings") else action_tag,
-                    ))
+                    mcp_server = route["mcp_server"]
+                    tool_name = route["tool_name"]
+                    base_args = route.get("arguments") or {}
+
+                    split_map = None
+                    prop_map = route.get("property_mapping")
+                    if prop_map:
+                        split_map = []
+                        for dest, path in prop_map.items():
+                            parts = tuple(path.split("."))
+                            if len(parts) == 1:
+                                split_map.append((dest, parts[0], None))
+                            else:
+                                split_map.append((dest, None, parts))
+
+                    processed_routes.append((mcp_server, tool_name, base_args, split_map))
+
+                # We can swap the loops to iterate routes then rows, or rows then routes.
+                # However, original order is row1 route1, row1 route2, row2 route1...
+                # So we keep rows outer loop.
+                for row, r_action_tag in zip(rows, row_action_tags):
+                    for mcp_server, tool_name, base_args, split_map in processed_routes:
+                        if split_map:
+                            mapped = {}
+                            for dest, single_part, parts in split_map:
+                                if single_part is not None:
+                                    val = row.get(single_part)
+                                    if val is not None:
+                                        mapped[dest] = val
+                                else:
+                                    cur = row
+                                    for part in parts:
+                                        if isinstance(cur, dict) and part in cur:
+                                            cur = cur[part]
+                                        else:
+                                            cur = None
+                                            break
+                                    if cur is not None:
+                                        mapped[dest] = cur
+
+                            args = dict(base_args)
+                            existing = args.get("properties")
+                            if existing is None:
+                                args["properties"] = mapped
+                            elif isinstance(existing, dict):
+                                merged = dict(existing)
+                                merged.update(mapped)
+                                args["properties"] = merged
+                            else:
+                                args["properties"] = mapped
+                        else:
+                            args = dict(base_args)
+
+                        invocations.append({
+                            "mcp_server": mcp_server,
+                            "tool_name": tool_name,
+                            "arguments": args,
+                            "action_tag": r_action_tag,
+                            "source_artifact_type": row_type,
+                            "parent_artifact_type": artifact_type,
+                            "timestamp": timestamp,
+                            "router_version": ROUTER_VERSION,
+                        })
             # Also allow routes targeting the whole-document (multi-row) artifact
             # type, which pushes one page representing the full register.
             doc_routes = self.routes.get(artifact_type, [])
