@@ -148,47 +148,10 @@ class MCPRouter:
         action_tag = _classify_action(artifact)
         timestamp = _utc_now_iso()
 
-        invocations: list[dict[str, Any]] = []
-
         if _is_multi_row(artifact_type):
-            # Multi-row: one invocation per row per route at the row-level type.
-            row_type = _row_to_artifact_type(artifact_type)
-            row_routes = self.routes.get(row_type) or self.routes.get(artifact_type, [])
-            rows = artifact.get(_rows_key(artifact_type)) or []
-            for row in rows:
-                for route in row_routes:
-                    invocations.append(self._build_invocation(
-                        source=row,
-                        route=route,
-                        artifact_type=row_type,
-                        parent_artifact_type=artifact_type,
-                        timestamp=timestamp,
-                        action_tag=_classify_action(row) if row.get("warnings") else action_tag,
-                    ))
-            # Also allow routes targeting the whole-document (multi-row) artifact
-            # type, which pushes one page representing the full register.
-            doc_routes = self.routes.get(artifact_type, [])
-            for route in doc_routes:
-                invocations.append(self._build_invocation(
-                    source=artifact,
-                    route=route,
-                    artifact_type=artifact_type,
-                    parent_artifact_type=None,
-                    timestamp=timestamp,
-                    action_tag=action_tag,
-                ))
+            invocations = self._route_multi_row(artifact, artifact_type, timestamp, action_tag)
         else:
-            # Single-artifact: one invocation per route.
-            routes = self.routes.get(artifact_type, [])
-            for route in routes:
-                invocations.append(self._build_invocation(
-                    source=artifact,
-                    route=route,
-                    artifact_type=artifact_type,
-                    parent_artifact_type=None,
-                    timestamp=timestamp,
-                    action_tag=action_tag,
-                ))
+            invocations = self._route_single_artifact(artifact, artifact_type, timestamp, action_tag)
 
         status = "ok" if invocations else "no-config"
         return {
@@ -199,6 +162,55 @@ class MCPRouter:
             "artifact_type": artifact_type,
             "router_version": ROUTER_VERSION,
         }
+
+    def _route_multi_row(
+        self, artifact: dict[str, Any], artifact_type: str, timestamp: str, action_tag: str
+    ) -> list[dict[str, Any]]:
+        invocations: list[dict[str, Any]] = []
+        # Multi-row: one invocation per row per route at the row-level type.
+        row_type = _row_to_artifact_type(artifact_type)
+        row_routes = self.routes.get(row_type) or self.routes.get(artifact_type, [])
+        rows = artifact.get(_rows_key(artifact_type)) or []
+        for row in rows:
+            for route in row_routes:
+                invocations.append(self._build_invocation(
+                    source=row,
+                    route=route,
+                    artifact_type=row_type,
+                    parent_artifact_type=artifact_type,
+                    timestamp=timestamp,
+                    action_tag=_classify_action(row) if row.get("warnings") else action_tag,
+                ))
+        # Also allow routes targeting the whole-document (multi-row) artifact
+        # type, which pushes one page representing the full register.
+        doc_routes = self.routes.get(artifact_type, [])
+        for route in doc_routes:
+            invocations.append(self._build_invocation(
+                source=artifact,
+                route=route,
+                artifact_type=artifact_type,
+                parent_artifact_type=None,
+                timestamp=timestamp,
+                action_tag=action_tag,
+            ))
+        return invocations
+
+    def _route_single_artifact(
+        self, artifact: dict[str, Any], artifact_type: str, timestamp: str, action_tag: str
+    ) -> list[dict[str, Any]]:
+        invocations: list[dict[str, Any]] = []
+        # Single-artifact: one invocation per route.
+        routes = self.routes.get(artifact_type, [])
+        for route in routes:
+            invocations.append(self._build_invocation(
+                source=artifact,
+                route=route,
+                artifact_type=artifact_type,
+                parent_artifact_type=None,
+                timestamp=timestamp,
+                action_tag=action_tag,
+            ))
+        return invocations
 
     def _build_invocation(
         self,
