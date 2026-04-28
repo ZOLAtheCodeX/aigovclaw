@@ -36,6 +36,16 @@ OUTPUT_DIR = DEMO_DIR / "output"
 
 PLUGIN_RELATIVE = Path("audit-log-generator") / "plugin.py"
 
+sys.path.insert(0, str(REPO_ROOT))
+from aigovclaw.task_envelope import TaskEnvelope
+from aigovclaw.action_executor.audit_event import (
+    AuditEvent,
+    EVENT_WORKFLOW_COMPLETED,
+    EVENT_WORKFLOW_FAILED,
+    EVENT_WORKFLOW_STARTED,
+)
+from aigovclaw.action_executor.safety import new_request_id
+
 
 def _aigovops_plugin_candidates() -> list[Path]:
     """Return the ordered list of paths where the plugin may live.
@@ -81,23 +91,14 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def main() -> int:
-    sys.path.insert(0, str(REPO_ROOT))
-    from aigovclaw.task_envelope import TaskEnvelope
-    from aigovclaw.action_executor.audit_event import (
-        AuditEvent,
-        EVENT_WORKFLOW_COMPLETED,
-        EVENT_WORKFLOW_FAILED,
-        EVENT_WORKFLOW_STARTED,
-    )
-    from aigovclaw.action_executor.safety import new_request_id
-
+def _load_input_fixture() -> dict:
     input_path = DEMO_DIR / "input.json"
     if not input_path.exists():
         raise SystemExit(f"Missing input fixture: {input_path}")
-    system_description = json.loads(input_path.read_text(encoding="utf-8"))
+    return json.loads(input_path.read_text(encoding="utf-8"))
 
-    envelope_id = new_request_id()
+
+def _build_task_envelope(system_description: dict, envelope_id: str) -> TaskEnvelope:
     envelope = TaskEnvelope(
         envelope_id=envelope_id,
         command="audit-log",
@@ -111,12 +112,15 @@ def main() -> int:
         metadata={"demo_fixture": "demos/audit-log/input.json"},
     )
     envelope.validate()
+    return envelope
 
+
+def _build_workflow_start_event(envelope: TaskEnvelope) -> AuditEvent:
     workflow_start = AuditEvent(
         event=EVENT_WORKFLOW_STARTED,
         timestamp=_utc_now_iso(),
         audit_entry_id=new_request_id(),
-        request_id=envelope_id,
+        request_id=envelope.envelope_id,
         plugin="audit-log-generator",
         action="re-run-plugin",
         target=envelope.args.get("system_name", ""),
@@ -126,32 +130,29 @@ def main() -> int:
         },
     )
     workflow_start.validate()
+    return workflow_start
 
-    plugin_path = _locate_plugin()
-    plugin = _import_plugin(plugin_path)
 
-    try:
-        entry = plugin.generate_audit_log(envelope.args)
-        markdown = plugin.render_markdown(entry)
-    except Exception as exc:
-        failure = AuditEvent(
-            event=EVENT_WORKFLOW_FAILED,
-            timestamp=_utc_now_iso(),
-            audit_entry_id=new_request_id(),
-            request_id=envelope_id,
-            plugin="audit-log-generator",
-            action="re-run-plugin",
-            target=envelope.args.get("system_name", ""),
-            payload={"error": f"{type(exc).__name__}: {exc}"},
-        )
-        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        (OUTPUT_DIR / "audit-events.jsonl").open("a", encoding="utf-8").write(
-            json.dumps(workflow_start.to_dict()) + "\n"
-            + json.dumps(failure.to_dict()) + "\n"
-        )
-        print(f"FAILED: {exc}", file=sys.stderr)
-        return 1
+def _handle_failure(exc: Exception, envelope_id: str, system_name: str, workflow_start: AuditEvent) -> int:
+    failure = AuditEvent(
+        event=EVENT_WORKFLOW_FAILED,
+        timestamp=_utc_now_iso(),
+        audit_entry_id=new_request_id(),
+        request_id=envelope_id,
+        plugin="audit-log-generator",
+        action="re-run-plugin",
+        target=system_name,
+        payload={"error": f"{type(exc).__name__}: {exc}"},
+    )
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    with (OUTPUT_DIR / "audit-events.jsonl").open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(workflow_start.to_dict()) + "\n")
+        fh.write(json.dumps(failure.to_dict()) + "\n")
+    print(f"FAILED: {exc}", file=sys.stderr)
+    return 1
 
+
+def _write_outputs_and_complete(entry: dict, markdown: str, envelope_id: str, workflow_start: AuditEvent) -> int:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     system_name = entry.get("system_name", "unknown-system")
     timestamp = entry.get("timestamp", _utc_now_iso()).replace(":", "-")
@@ -188,6 +189,26 @@ def main() -> int:
     print(f"markdown:        {out_md.relative_to(REPO_ROOT)}")
     print(f"audit events:    {(OUTPUT_DIR / 'audit-events.jsonl').relative_to(REPO_ROOT)}")
     return 0
+
+
+def main() -> int:
+    system_description = _load_input_fixture()
+    envelope_id = new_request_id()
+
+    envelope = _build_task_envelope(system_description, envelope_id)
+    workflow_start = _build_workflow_start_event(envelope)
+
+    plugin_path = _locate_plugin()
+    plugin = _import_plugin(plugin_path)
+
+    try:
+        entry = plugin.generate_audit_log(envelope.args)
+        markdown = plugin.render_markdown(entry)
+    except Exception as exc:
+        system_name = envelope.args.get("system_name", "")
+        return _handle_failure(exc, envelope_id, system_name, workflow_start)
+
+    return _write_outputs_and_complete(entry, markdown, envelope_id, workflow_start)
 
 
 if __name__ == "__main__":
