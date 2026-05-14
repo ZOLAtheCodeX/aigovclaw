@@ -535,6 +535,60 @@ class StubCascadeAnalyzer:
         return self.plans.get(event, {"flat_action_list": [], "cascade_tree": {}})
 
 
+class TestOrchestratorRunCascade(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def test_run_cascade_raises_if_no_analyzer(self):
+        cycle, _, _, _, _ = _make_cycle(self.tmp.name)
+        with self.assertRaisesRegex(PDCAError, "cascade_analyzer was not provided"):
+            cycle.run_cascade({"event": "test"})
+
+    def test_run_cascade_executes_and_updates_state(self):
+        broker_dir = Path(self.tmp.name) / "broker"
+        broker_dir.mkdir(parents=True, exist_ok=True)
+        broker = UserInteractionBroker(interactions_dir=broker_dir)
+        audit, audit_records = make_audit_recorder()
+        executor = MockActionExecutor()
+        planner = MockPlanner()
+        assessor = make_readiness_assessor([])
+        analyzer = StubCascadeAnalyzer({"test-event": {"flat_action_list": [], "cascade_tree": {}}})
+
+        cycle = PDCACycle(
+            action_executor=executor,
+            organization_ref="org-test",
+            target_certification="iso42001-stage1",
+            target_date="2026-12-31",
+            planner=planner,
+            readiness_assessor=assessor,
+            cascade_analyzer=analyzer,
+            audit_log_generator=audit,
+            user_broker=broker,
+            state_dir=Path(self.tmp.name) / "state",
+        )
+
+        # Before run
+        self.assertIsNone(cycle.state.current_loop)
+
+        loop = cycle.run_cascade({"event": "test-event"}, max_depth=3, action_budget=20)
+
+        self.assertIsInstance(loop, CascadeLoop)
+        self.assertEqual(len(analyzer.calls), 1)
+        self.assertEqual(analyzer.calls[0]["trigger_event"]["event"], "test-event")
+        self.assertEqual(loop.max_depth, 3)
+        self.assertEqual(loop.action_budget, 20)
+
+        # After run
+        self.assertIsNone(cycle.state.current_loop)
+
+        # State should be persisted
+        state_dir = Path(self.tmp.name) / "state"
+        state_file = state_dir / f"{cycle.state.cycle_id}.json"
+        self.assertTrue(state_file.exists())
+
+
 class TestCascadeLoop(unittest.TestCase):
 
     def test_no_cascade_empty_returns_empty_trace(self):
