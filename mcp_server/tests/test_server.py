@@ -14,6 +14,7 @@ import os
 import sys
 import traceback
 from pathlib import Path
+import pytest
 
 # Locate the aigovclaw repo root (parent of mcp_server/). Put it on sys.path
 # so the server module and its tools imports resolve without an install.
@@ -37,6 +38,14 @@ def _mcp_available() -> bool:
     except ImportError:
         return False
 
+def _plugins_available() -> bool:
+    # Just try resolving the plugins path, catch the specific expected error
+    from mcp_server.server import _resolve_plugins_path
+    try:
+        _resolve_plugins_path()
+        return True
+    except FileNotFoundError:
+        return False
 
 def _skip_if_no_mcp() -> bool:
     if not _mcp_available():
@@ -47,13 +56,6 @@ def _skip_if_no_mcp() -> bool:
         return True
     return False
 
-def _skip_if_no_plugins() -> bool:
-    from mcp_server.server import _resolve_plugins_path
-    try:
-        _resolve_plugins_path()
-        return False
-    except FileNotFoundError:
-        return True
 
 # ---------------------------------------------------------------------------
 # Test cases.
@@ -63,9 +65,8 @@ def _skip_if_no_plugins() -> bool:
 def test_tool_count_matches_catalogue() -> None:
     if _skip_if_no_mcp():
         return
-    if _skip_if_no_plugins():
-        import pytest
-        pytest.skip("AIGOVOPS_PLUGINS_PATH is missing. Skipping test.")
+    if not _plugins_available():
+        pytest.skip("aigovops unavailable: AIGOVOPS_PLUGINS_PATH is not a directory")
 
     from mcp_server.server import build_server  # type: ignore
     from tools.aigovops_tools import PLUGIN_TOOL_DEFS  # type: ignore
@@ -80,9 +81,8 @@ def test_tool_count_matches_catalogue() -> None:
 def test_every_tool_has_safety_annotations() -> None:
     if _skip_if_no_mcp():
         return
-    if _skip_if_no_plugins():
-        import pytest
-        pytest.skip("AIGOVOPS_PLUGINS_PATH is missing. Skipping test.")
+    if not _plugins_available():
+        pytest.skip("aigovops unavailable: AIGOVOPS_PLUGINS_PATH is not a directory")
 
     from mcp_server.server import build_server  # type: ignore
 
@@ -105,9 +105,8 @@ def test_every_tool_has_safety_annotations() -> None:
 def test_invalid_enum_rejected() -> None:
     if _skip_if_no_mcp():
         return
-    if _skip_if_no_plugins():
-        import pytest
-        pytest.skip("AIGOVOPS_PLUGINS_PATH is missing. Skipping test.")
+    if not _plugins_available():
+        pytest.skip("aigovops unavailable: AIGOVOPS_PLUGINS_PATH is not a directory")
 
     from tools.registry import REGISTRY  # type: ignore
     from mcp_server.server import build_server  # type: ignore
@@ -135,9 +134,8 @@ def test_invalid_enum_rejected() -> None:
 def test_happy_path_audit_log() -> None:
     if _skip_if_no_mcp():
         return
-    if _skip_if_no_plugins():
-        import pytest
-        pytest.skip("AIGOVOPS_PLUGINS_PATH is missing. Skipping test.")
+    if not _plugins_available():
+        pytest.skip("aigovops unavailable: AIGOVOPS_PLUGINS_PATH is not a directory")
 
     from tools.registry import REGISTRY  # type: ignore
     from mcp_server.server import build_server  # type: ignore
@@ -168,9 +166,8 @@ def test_happy_path_audit_log() -> None:
 def test_new_uk_atrs_tool_registered() -> None:
     if _skip_if_no_mcp():
         return
-    if _skip_if_no_plugins():
-        import pytest
-        pytest.skip("AIGOVOPS_PLUGINS_PATH is missing. Skipping test.")
+    if not _plugins_available():
+        pytest.skip("aigovops unavailable: AIGOVOPS_PLUGINS_PATH is not a directory")
 
     from mcp_server.server import build_server  # type: ignore
 
@@ -199,9 +196,8 @@ def test_new_uk_atrs_tool_registered() -> None:
 def test_crosswalk_tool_registered() -> None:
     if _skip_if_no_mcp():
         return
-    if _skip_if_no_plugins():
-        import pytest
-        pytest.skip("AIGOVOPS_PLUGINS_PATH is missing. Skipping test.")
+    if not _plugins_available():
+        pytest.skip("aigovops unavailable: AIGOVOPS_PLUGINS_PATH is not a directory")
 
     from mcp_server.server import build_server  # type: ignore
 
@@ -223,9 +219,8 @@ def test_crosswalk_tool_registered() -> None:
 def test_inventory_tool_registered() -> None:
     if _skip_if_no_mcp():
         return
-    if _skip_if_no_plugins():
-        import pytest
-        pytest.skip("AIGOVOPS_PLUGINS_PATH is missing. Skipping test.")
+    if not _plugins_available():
+        pytest.skip("aigovops unavailable: AIGOVOPS_PLUGINS_PATH is not a directory")
 
     from mcp_server.server import build_server  # type: ignore
 
@@ -267,13 +262,14 @@ def _run_all() -> int:
         try:
             fn()
             print(f"PASS {fn.__name__}")
-        except AssertionError as exc:
-            failures += 1
-            print(f"FAIL {fn.__name__}: {exc}")
         except Exception as exc:
-            failures += 1
-            print(f"ERROR {fn.__name__}: {exc}")
-            traceback.print_exc()
+            # Handle skipping manually since we don't have pytest framework here
+            if "Skipping test." in str(exc):
+                print(f"SKIP {fn.__name__}")
+            else:
+                failures += 1
+                print(f"ERROR {fn.__name__}: {exc}")
+                traceback.print_exc()
     print(f"\n{len(tests) - failures}/{len(tests)} passed")
     return 0 if failures == 0 else 1
 
