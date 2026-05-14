@@ -34,7 +34,7 @@ import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any, Optional
 
 
 AGENT_SIGNATURE = "jules-dispatcher/0.1.0"
@@ -255,11 +255,9 @@ class FlaggedIssueStore:
         path = self._path(issue_id)
         if not path.is_file():
             # Look in archive as fallback.
-            for sub in sorted(self.archive_dir.glob("*/")):
-                candidate = sub / f"{issue_id}.json"
-                if candidate.is_file():
-                    path = candidate
-                    break
+            candidate = next(self.archive_dir.glob(f"*/{issue_id}.json"), None)
+            if candidate is not None and candidate.is_file():
+                path = candidate
             else:
                 raise FileNotFoundError(f"flagged issue {issue_id!r} not found")
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -810,7 +808,7 @@ class Dispatcher:
         if self.tool_registry is not None:
             try:
                 tool_inputs = {
-                    "system_name": f"aigovclaw/jules-dispatcher",
+                    "system_name": "aigovclaw/jules-dispatcher",
                     "purpose": f"Autonomous maintenance action by Jules via playbook {issue.playbook}.",
                     "risk_tier": "limited",
                     "data_processed": ["flagged-issue-metadata", "jules-session-metadata"],
