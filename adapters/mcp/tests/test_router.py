@@ -240,6 +240,65 @@ def test_route_batch_preserves_order():
     assert results[1]["artifact_type"] == "risk-register"
 
 
+def test_route_multi_row_with_doc_routes():
+    config = _base_config()
+    config["routes"]["risk-register"] = [
+        {
+            "mcp_server": "slack",
+            "tool_name": "slack-post-message",
+            "arguments": {"channel": "#governance"},
+        }
+    ]
+    r = router.MCPRouter(config)
+    register = {
+        "rows": [
+            {"id": "RR-1", "description": "R1", "system_name": "S1", "warnings": []},
+        ],
+        "warnings": [],
+    }
+    result = r.route(register, "risk-register")
+    # 1 row route * 2 (notion, linear) + 1 doc route = 3 invocations
+    assert len(result["invocations"]) == 3
+    slack_inv = next(inv for inv in result["invocations"] if inv["mcp_server"] == "slack")
+    assert slack_inv["source_artifact_type"] == "risk-register"
+    assert slack_inv["parent_artifact_type"] is None
+
+
+def test_get_nested_miss():
+    # Covers line 48: returning None when part is not a dict
+    obj = {"a": "not-a-dict"}
+    assert router._get_nested(obj, "a.b") is None
+    # Covers line 48: returning None when path is empty
+    assert router._get_nested(obj, "") is None
+
+
+def test_config_validation_rejects_non_dict_route():
+    try:
+        router.MCPRouter({"routes": {"audit-log-entry": ["not-a-dict"]}})
+    except ValueError as exc:
+        assert "must be a dict" in str(exc)
+        return
+    raise AssertionError("expected ValueError")
+
+
+def test_build_invocation_with_non_dict_existing_properties():
+    # Covers line 223: arguments['properties'] is not a dict
+    r = router.MCPRouter({
+        "routes": {
+            "test-artifact": [
+                {
+                    "mcp_server": "test-server",
+                    "tool_name": "test-tool",
+                    "arguments": {"properties": "string-not-dict"},
+                    "property_mapping": {"new_prop": "old_prop"},
+                }
+            ]
+        }
+    })
+    result = r.route({"old_prop": "val"}, "test-artifact")
+    assert result["invocations"][0]["arguments"]["properties"] == {"new_prop": "val"}
+
+
 def _run_all():
     import inspect
     tests = [(n, o) for n, o in inspect.getmembers(sys.modules[__name__])
