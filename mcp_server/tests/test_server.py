@@ -47,6 +47,13 @@ def _skip_if_no_mcp() -> bool:
         return True
     return False
 
+def _skip_if_no_plugins() -> bool:
+    from mcp_server.server import _resolve_plugins_path
+    try:
+        _resolve_plugins_path()
+        return False
+    except FileNotFoundError:
+        return True
 
 # ---------------------------------------------------------------------------
 # Test cases.
@@ -56,6 +63,10 @@ def _skip_if_no_mcp() -> bool:
 def test_tool_count_matches_catalogue() -> None:
     if _skip_if_no_mcp():
         return
+    if _skip_if_no_plugins():
+        import pytest
+        pytest.skip("AIGOVOPS_PLUGINS_PATH is missing. Skipping test.")
+
     from mcp_server.server import build_server  # type: ignore
     from tools.aigovops_tools import PLUGIN_TOOL_DEFS  # type: ignore
 
@@ -69,6 +80,10 @@ def test_tool_count_matches_catalogue() -> None:
 def test_every_tool_has_safety_annotations() -> None:
     if _skip_if_no_mcp():
         return
+    if _skip_if_no_plugins():
+        import pytest
+        pytest.skip("AIGOVOPS_PLUGINS_PATH is missing. Skipping test.")
+
     from mcp_server.server import build_server  # type: ignore
 
     server = build_server()
@@ -90,6 +105,10 @@ def test_every_tool_has_safety_annotations() -> None:
 def test_invalid_enum_rejected() -> None:
     if _skip_if_no_mcp():
         return
+    if _skip_if_no_plugins():
+        import pytest
+        pytest.skip("AIGOVOPS_PLUGINS_PATH is missing. Skipping test.")
+
     from tools.registry import REGISTRY  # type: ignore
     from mcp_server.server import build_server  # type: ignore
 
@@ -116,6 +135,10 @@ def test_invalid_enum_rejected() -> None:
 def test_happy_path_audit_log() -> None:
     if _skip_if_no_mcp():
         return
+    if _skip_if_no_plugins():
+        import pytest
+        pytest.skip("AIGOVOPS_PLUGINS_PATH is missing. Skipping test.")
+
     from tools.registry import REGISTRY  # type: ignore
     from mcp_server.server import build_server  # type: ignore
 
@@ -145,6 +168,10 @@ def test_happy_path_audit_log() -> None:
 def test_new_uk_atrs_tool_registered() -> None:
     if _skip_if_no_mcp():
         return
+    if _skip_if_no_plugins():
+        import pytest
+        pytest.skip("AIGOVOPS_PLUGINS_PATH is missing. Skipping test.")
+
     from mcp_server.server import build_server  # type: ignore
 
     server = build_server()
@@ -172,6 +199,10 @@ def test_new_uk_atrs_tool_registered() -> None:
 def test_crosswalk_tool_registered() -> None:
     if _skip_if_no_mcp():
         return
+    if _skip_if_no_plugins():
+        import pytest
+        pytest.skip("AIGOVOPS_PLUGINS_PATH is missing. Skipping test.")
+
     from mcp_server.server import build_server  # type: ignore
 
     server = build_server()
@@ -192,6 +223,10 @@ def test_crosswalk_tool_registered() -> None:
 def test_inventory_tool_registered() -> None:
     if _skip_if_no_mcp():
         return
+    if _skip_if_no_plugins():
+        import pytest
+        pytest.skip("AIGOVOPS_PLUGINS_PATH is missing. Skipping test.")
+
     from mcp_server.server import build_server  # type: ignore
 
     server = build_server()
