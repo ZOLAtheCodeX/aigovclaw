@@ -1,22 +1,12 @@
-"""
-AIGovClaw MCP Server
+"""AIGovClaw Model Context Protocol (MCP) Server.
 
-Exposes the AIGovOps plugin catalogue (19 plugins) as Model Context Protocol
-tools over stdio transport. Any MCP-capable client (Claude Desktop, Cursor,
-Zed, a future VerifyWise or Vanta MCP adapter) can invoke AIGovOps governance
-plugins through this server.
+Exposes the Hermes Harness governance plugins as MCP tools so that
+compatible agents (e.g. Claude Desktop) can execute governance tasks
+securely and transparently.
 
-Design:
-
-- The tool catalogue is sourced directly from aigovclaw.tools.aigovops_tools.
-  PLUGIN_TOOL_DEFS. This module does not re-author tool definitions.
-- Plugins are loaded at startup from the filesystem path given by the
-  AIGOVOPS_PLUGINS_PATH environment variable (default
-  /Users/zola/Documents/CODING/aigovops/plugins).
-- Every tool is annotated with the safety flags carried by the underlying
-  Hermes Tool: x-aigovops-read-only, x-aigovops-concurrency-safe,
-  x-aigovops-destructive. All AIGovOps plugins are read-only and
-  non-destructive by contract.
+Features:
+- Dynamically translates the standard Hermes `tools.registry` catalogue
+  into an MCP JSON-RPC Server capability.
 - Input validation reuses the Hermes ToolRegistry validator. Validation
   failures surface as MCP errors (not silently swallowed).
 - Every invocation is logged to stderr with timestamp, tool name, input
